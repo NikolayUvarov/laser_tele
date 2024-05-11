@@ -1,4 +1,4 @@
-package laser_tele
+package laser_tele_api
 
 import (
 	"fmt"
