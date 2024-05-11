@@ -1,0 +1,5 @@
+Laser Tele bot
+(c)LaserPes
+Bot catches all new updates in every time interval. 
+If this is a message bot sends massage with info about an update back.
+Also sends update info to log file. 
