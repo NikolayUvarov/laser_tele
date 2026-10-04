@@ -31,6 +31,7 @@ func TestMain(m *testing.M) {
 	}
 	APIKEY = testAPIKEY
 	tgApiLinkKEY = tgApiLink + APIKEY
+	tgApiFileLinkKEY = tgApiFileLink + APIKEY
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -98,6 +99,18 @@ func useFakeTelegram(t *testing.T, updates ...map[string]interface{}) *fakeTeleg
 	isUpdatesInitialized = false
 	t.Cleanup(func() { httpGet = originalGet })
 	return tg
+}
+
+// useTestServer sends all requests of the library to the test server with handler
+func useTestServer(t *testing.T, handler http.HandlerFunc) {
+	server := httptest.NewServer(handler)
+	originalLink, originalFileLink, originalGet, originalClient := tgApiLinkKEY, tgApiFileLinkKEY, httpGet, fileClient
+	tgApiLinkKEY, tgApiFileLinkKEY = server.URL+"/bot"+APIKEY, server.URL+"/file/bot"+APIKEY
+	httpGet, fileClient = server.Client().Get, server.Client()
+	t.Cleanup(func() {
+		server.Close()
+		tgApiLinkKEY, tgApiFileLinkKEY, httpGet, fileClient = originalLink, originalFileLink, originalGet, originalClient
+	})
 }
 
 func collectUpdates(t *testing.T) []Update {
@@ -279,7 +292,7 @@ func TestSendPhoto(t *testing.T) {
 		path, chatID, caption, fileName, content string
 	}
 	var got request
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	useTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		got.path = r.URL.Path
 		got.chatID = r.FormValue("chat_id")
 		got.caption = r.FormValue("caption")
@@ -288,12 +301,7 @@ func TestSendPhoto(t *testing.T) {
 			got.fileName, got.content = header.Filename, string(data)
 		}
 		w.Write([]byte(`{"ok":true,"result":{}}`))
-	}))
-	defer server.Close()
-
-	originalLink, originalClient := tgApiLinkKEY, fileClient
-	tgApiLinkKEY, fileClient = server.URL+"/bot"+APIKEY, server.Client()
-	defer func() { tgApiLinkKEY, fileClient = originalLink, originalClient }()
+	})
 
 	if err := os.WriteFile("test.jpg", []byte("image data"), 0644); err != nil {
 		t.Fatal(err)
@@ -304,6 +312,57 @@ func TestSendPhoto(t *testing.T) {
 	want := request{"/bot" + testAPIKEY + "/sendPhoto", "-100123", "Test image & more", "test.jpg", "image data"}
 	if got != want {
 		t.Errorf("Expected request %+v, but got %+v", want, got)
+	}
+}
+
+func TestLoadFile(t *testing.T) {
+	useTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/bot" + testAPIKEY + "/getFile":
+			switch fileID := r.URL.Query().Get("file_id"); fileID {
+			case "good":
+				w.Write([]byte(`{"ok":true,"result":{"file_id":"good","file_path":"photos/file_1.jpg"}}`))
+			case "deleted":
+				w.Write([]byte(`{"ok":true,"result":{"file_id":"deleted","file_path":"photos/deleted.jpg"}}`))
+			default:
+				w.WriteHeader(400)
+				w.Write([]byte(`{"ok":false,"error_code":400,"description":"Bad Request: invalid file_id"}`))
+			}
+		case "/file/bot" + testAPIKEY + "/photos/file_1.jpg":
+			w.Write([]byte("image data"))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	path, err := LoadFile(1, "good")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "downloadedFiles/photos/file_1.jpg" {
+		t.Errorf("Expected path downloadedFiles/photos/file_1.jpg, but got %q", path)
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "image data" {
+		t.Errorf("Expected file with 'image data', but got %q, %v", data, err)
+	}
+
+	var apiErr *APIError
+	path, err = LoadFile(1, "wrong")
+	if !errors.As(err, &apiErr) || apiErr.ErrorCode != 400 || path != "" {
+		t.Errorf("Expected APIError 400 for wrong file_id, but got %q, %v", path, err)
+	}
+
+	path, err = LoadFile(1, "deleted")
+	if !errors.As(err, &apiErr) || apiErr.ErrorCode != 404 || path != "" {
+		t.Errorf("Expected APIError 404 for failed download, but got %q, %v", path, err)
+	}
+	if strings.Contains(err.Error(), testAPIKEY) {
+		t.Errorf("Error contains APIKEY: %v", err)
+	}
+
+	// FileDownload keeps old behaviour: nil resp and error message in data
+	if resp, data, _ := FileDownload(tgApiFileLinkKEY+"/photos/deleted.jpg", "photos/deleted.jpg"); resp != nil || !strings.Contains(string(data), "404") {
+		t.Errorf("Expected nil resp and error message, but got %v, %q", resp, data)
 	}
 }
 

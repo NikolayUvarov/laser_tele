@@ -58,21 +58,29 @@ func botLogic(processedUpdate laser_tele.Update) {
 
 	} else if len(processedUpdate.UpdateMessage.Photo) > 0 && processedUpdate.UpdateMessage.Photo[0].FileID != "" {
 		fmt.Println("Got photo")
-		laser_tele.LoadFile(processedUpdate.UpdateMessage.Chat.ID, processedUpdate.UpdateMessage.Photo[0].FileID)
+		err = loadFile(processedUpdate.UpdateMessage.Chat.ID, processedUpdate.UpdateMessage.Photo[0].FileID)
 
 	} else if processedUpdate.UpdateMessage.Video.FileID != "" {
 		fmt.Println("Got Video")
-		laser_tele.LoadFile(processedUpdate.UpdateMessage.Chat.ID, processedUpdate.UpdateMessage.Video.FileID)
+		err = loadFile(processedUpdate.UpdateMessage.Chat.ID, processedUpdate.UpdateMessage.Video.FileID)
 
 	} else if processedUpdate.UpdateMessage.Document.FileID != "" {
 		fmt.Println("Got Document")
-		laser_tele.LoadFile(processedUpdate.UpdateMessage.Chat.ID, processedUpdate.UpdateMessage.Document.FileID)
+		err = loadFile(processedUpdate.UpdateMessage.Chat.ID, processedUpdate.UpdateMessage.Document.FileID)
 
 	} else {
 		err = laser_tele.SendMessage(processedUpdate.UpdateMessage.Chat.ID, fmt.Sprint(processedUpdate.UpdateMessage)+"\nID:"+fmt.Sprint(processedUpdate.UpdateID))
 	}
 
 	if err != nil {
-		fmt.Println("Can't send answer:", err)
+		fmt.Println("Can't process update:", err)
 	}
+}
+
+func loadFile(chatID int, fileID string) error {
+	path, err := laser_tele.LoadFile(chatID, fileID)
+	if err == nil {
+		fmt.Println("File saved to", path)
+	}
+	return err
 }

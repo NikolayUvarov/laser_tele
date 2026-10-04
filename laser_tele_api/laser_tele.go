@@ -29,6 +29,7 @@ var httpGet = httpClient.Get
 var isConfigDone bool = false
 
 var tgApiLinkKEY string
+var tgApiFileLinkKEY string
 var newUpdate Update
 var isUpdatesInitialized bool
 var OnUpdateCallbackFunc func(Update)
@@ -71,6 +72,7 @@ func doLaserTeleInit() {
 		timeout = time.Duration(timeoutInt) * time.Second
 	}
 	tgApiLinkKEY = tgApiLink + APIKEY
+	tgApiFileLinkKEY = tgApiFileLink + APIKEY
 	isConfigDone = true
 	fmt.Println("APIKEY is set")
 	fmt.Println("TIMEOUT: ", timeout)
@@ -305,53 +307,64 @@ func SendDocument(chatID int, text, document string) error {
 	return sendFile("sendDocument", "sendDocument", "document", chatID, text, document)
 }
 
-// Loading a file from user message. Returns path to downloaded file or "" on error
-func LoadFile(chatID int, fileID string) string {
+// Loading a file from user message. Returns path to downloaded file
+func LoadFile(chatID int, fileID string) (string, error) {
 	params := url.Values{}
 	params.Set("file_id", fileID)
 	body, err := apiGet("loadFile", "getFile", params)
 	if err != nil {
-		return ""
+		return "", err
 	}
 
 	var resultFile File
-	if err := json.Unmarshal([]byte(body), &resultFile); err != nil || !resultFile.Ok {
-		return ""
+	if err := json.Unmarshal([]byte(body), &resultFile); err != nil {
+		return "", err
 	}
 	filePath := resultFile.Result.FilePath
-	fileLink := tgApiFileLink + APIKEY + "/" + filePath
-	if resp, _, _ := FileDownload(fileLink, filePath); resp == nil {
-		return ""
+	if filePath == "" {
+		return "", &APIError{Method: "getFile", Description: "no file_path in response"}
 	}
-	return "downloadedFiles/" + filePath
+	if _, _, _, err := downloadFile(tgApiFileLinkKEY+"/"+filePath, filePath); err != nil {
+		return "", err
+	}
+	return "downloadedFiles/" + filePath, nil
 }
 
+// Downloads file by link reqString and saves it to downloadedFiles/filePath.
+// On error resp is nil and data contains error message
 func FileDownload(reqString, filePath string) (resp *http.Response, data []byte, contentType string) {
-
-	var err error
-	resp, err = fileClient.Get(reqString)
+	resp, data, contentType, err := downloadFile(reqString, filePath)
 	if err != nil {
+		return nil, []byte(err.Error()), ""
+	}
+	return resp, data, contentType
+}
+
+func downloadFile(reqString, filePath string) (*http.Response, []byte, string, error) {
+	resp, err := fileClient.Get(reqString)
+	if err != nil {
+		err = hideKeyInError(err)
 		line2logfile("fileLoad", "RESP: CONNECTION_ERROR "+err.Error())
-		return nil, []byte("Cannot open addr " + hideKey(reqString)), ""
+		return nil, nil, "", err
 	}
 	defer resp.Body.Close()
 
-	contentType = resp.Header.Get("Content-Type")
+	contentType := resp.Header.Get("Content-Type")
 	line2logfile("fileLoad", fmt.Sprintf("Response status: %s, Content-Type: %12s, Loading URL: %s", resp.Status, contentType, reqString))
 	if resp.StatusCode != http.StatusOK {
-		return nil, []byte("Bad response status " + resp.Status + " from " + hideKey(reqString)), ""
+		return nil, nil, "", &APIError{Method: "downloadFile", ErrorCode: resp.StatusCode, Description: http.StatusText(resp.StatusCode)}
 	}
 
-	data, err = io.ReadAll(resp.Body)
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, []byte("Error reading data from remote " + hideKey(reqString)), ""
+		return nil, nil, "", fmt.Errorf("download file %s: %w", filePath, err)
 	}
 
 	if err := saveFile("downloadedFiles/"+filePath, data); err != nil {
 		line2logfile("fileLoad", "CANT_SAVE_FILE "+err.Error())
-		return nil, []byte("Error saving file " + filePath + ": " + err.Error()), ""
+		return nil, nil, "", fmt.Errorf("save file %s: %w", filePath, err)
 	}
-	return resp, data, contentType
+	return resp, data, contentType, nil
 }
 
 func StringToFile(fileName string, str string) {

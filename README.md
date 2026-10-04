@@ -33,4 +33,6 @@ The send functions (`SendMessage`, `SendKeyboard`, `EditMessageReplyMarkup`, `Se
 If Telegram refused the request, it is `*laser_tele.APIError` with Telegram's `ErrorCode` and `Description`
 (for example, 403 if the user blocked the bot).
 
+`LoadFile` downloads a file from a user's message to `downloadedFiles/` and returns its path and an error.
+
 A full example is in [laser_tele_example/mybot.go](laser_tele_example/mybot.go).
