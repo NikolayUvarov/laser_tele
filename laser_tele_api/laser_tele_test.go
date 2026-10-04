@@ -3,14 +3,17 @@ package laser_tele_api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 const testAPIKEY = "123456:TEST-KEY"
@@ -33,9 +36,9 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func mockResponse(body string) *http.Response {
+func mockResponse(status int, body string) *http.Response {
 	return &http.Response{
-		StatusCode: 200,
+		StatusCode: status,
 		Body:       io.NopCloser(bytes.NewReader([]byte(body))),
 	}
 }
@@ -53,10 +56,13 @@ func testMessage(updateID int, text string) map[string]interface{} {
 	}
 }
 
-// fakeTelegram imitates getUpdates of Telegram: keeps queue of updates and confirms them by offset
+// fakeTelegram imitates getUpdates of Telegram: keeps queue of updates and confirms them by offset.
+// Other methods get response with status and body
 type fakeTelegram struct {
 	updates  []map[string]interface{}
 	requests []*url.URL
+	status   int
+	body     string
 }
 
 func (tg *fakeTelegram) get(link string) (*http.Response, error) {
@@ -66,7 +72,7 @@ func (tg *fakeTelegram) get(link string) (*http.Response, error) {
 	}
 	tg.requests = append(tg.requests, u)
 	if !strings.HasSuffix(u.Path, "/getUpdates") {
-		return mockResponse(`{"ok":true,"result":{}}`), nil
+		return mockResponse(tg.status, tg.body), nil
 	}
 
 	if offsetStr := u.Query().Get("offset"); offsetStr != "" {
@@ -81,11 +87,11 @@ func (tg *fakeTelegram) get(link string) (*http.Response, error) {
 		tg.updates = left
 	}
 	body, _ := json.Marshal(map[string]interface{}{"ok": true, "result": append([]map[string]interface{}{}, tg.updates...)})
-	return mockResponse(string(body)), nil
+	return mockResponse(200, string(body)), nil
 }
 
 func useFakeTelegram(t *testing.T, updates ...map[string]interface{}) *fakeTelegram {
-	tg := &fakeTelegram{updates: updates}
+	tg := &fakeTelegram{updates: updates, status: 200, body: `{"ok":true,"result":{}}`}
 	originalGet := httpGet
 	httpGet = tg.get
 	newUpdate = Update{}
@@ -176,7 +182,9 @@ func TestUpdateRequestChan(t *testing.T) {
 func TestSendMessageText(t *testing.T) {
 	tg := useFakeTelegram(t)
 	text := "line1\nline2; 100% C# 1+1=2 tom & jerry"
-	SendMessage(-1001234567890, text)
+	if err := SendMessage(-1001234567890, text); err != nil {
+		t.Fatal(err)
+	}
 
 	if len(tg.requests) != 1 {
 		t.Fatalf("Expected 1 request, but got %d", len(tg.requests))
@@ -193,7 +201,9 @@ func TestSendMessageText(t *testing.T) {
 func TestSendKeyboard(t *testing.T) {
 	tg := useFakeTelegram(t)
 	keyboard := InlineKeyboard{Keyboard: []Row{{AddButton("A & B", "a#b")}}}
-	SendKeyboard(1, "choose", keyboard)
+	if err := SendKeyboard(1, "choose", keyboard); err != nil {
+		t.Fatal(err)
+	}
 
 	var got InlineKeyboard
 	if err := json.Unmarshal([]byte(tg.requests[0].Query().Get("reply_markup")), &got); err != nil {
@@ -220,9 +230,100 @@ func TestLogsHideAPIKEY(t *testing.T) {
 	}
 }
 
+func TestSendMessageAPIError(t *testing.T) {
+	tg := useFakeTelegram(t)
+	tg.status = 400
+	tg.body = `{"ok":false,"error_code":400,"description":"Bad Request: chat not found"}`
+
+	err := SendMessage(1, "text")
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("Expected APIError, but got %v", err)
+	}
+	if apiErr.ErrorCode != 400 || apiErr.Description != "Bad Request: chat not found" || apiErr.Method != "sendMessage" {
+		t.Errorf("Wrong APIError: %+v", apiErr)
+	}
+
+	tg.status = 502
+	tg.body = "<html>Bad Gateway</html>"
+	if err := SendMessage(1, "text"); !errors.As(err, &apiErr) || apiErr.ErrorCode != 502 {
+		t.Errorf("Expected APIError with code 502, but got %v", err)
+	}
+}
+
+func TestSendMessageConnectionError(t *testing.T) {
+	originalGet := httpGet
+	defer func() { httpGet = originalGet }()
+	httpGet = func(link string) (*http.Response, error) {
+		return nil, &url.Error{Op: "Get", URL: link, Err: errors.New("connection refused")}
+	}
+
+	err := SendMessage(1, "text")
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
+		t.Fatalf("Expected url.Error, but got %v", err)
+	}
+	if strings.Contains(err.Error(), testAPIKEY) {
+		t.Errorf("Error contains APIKEY: %v", err)
+	}
+}
+
 func TestSendPhotoMissingFile(t *testing.T) {
-	// must not panic
-	SendPhoto(1, "caption", "no_such_file.jpg")
+	if err := SendPhoto(1, "caption", "no_such_file.jpg"); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Expected os.ErrNotExist, but got %v", err)
+	}
+}
+
+func TestSendPhoto(t *testing.T) {
+	type request struct {
+		path, chatID, caption, fileName, content string
+	}
+	var got request
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.path = r.URL.Path
+		got.chatID = r.FormValue("chat_id")
+		got.caption = r.FormValue("caption")
+		if file, header, err := r.FormFile("photo"); err == nil {
+			data, _ := io.ReadAll(file)
+			got.fileName, got.content = header.Filename, string(data)
+		}
+		w.Write([]byte(`{"ok":true,"result":{}}`))
+	}))
+	defer server.Close()
+
+	originalLink, originalClient := tgApiLinkKEY, fileClient
+	tgApiLinkKEY, fileClient = server.URL+"/bot"+APIKEY, server.Client()
+	defer func() { tgApiLinkKEY, fileClient = originalLink, originalClient }()
+
+	if err := os.WriteFile("test.jpg", []byte("image data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SendPhoto(-100123, "Test image & more", "test.jpg"); err != nil {
+		t.Fatal(err)
+	}
+	want := request{"/bot" + testAPIKEY + "/sendPhoto", "-100123", "Test image & more", "test.jpg", "image data"}
+	if got != want {
+		t.Errorf("Expected request %+v, but got %+v", want, got)
+	}
+}
+
+func TestConfigCallbackOnUpdate(t *testing.T) {
+	tg := useFakeTelegram(t)
+	defer func() { OnUpdateCallbackFunc = nil }()
+
+	var got []string
+	DoLaserTeleInit(LaserTeleConfigT{
+		APIKEY:           testAPIKEY,
+		Timeout:          time.Second,
+		CallbackOnUpdate: func(u Update) { got = append(got, u.UpdateMessage.Text) },
+	})
+	UpdateRequest(nil)
+
+	tg.updates = append(tg.updates, testMessage(794872550, "hello"))
+	UpdateRequest(nil)
+	if len(got) != 1 || got[0] != "hello" {
+		t.Errorf("Expected config callback to get 'hello', but got %v", got)
+	}
 }
 
 func TestLoadApiKeyFromFile(t *testing.T) {

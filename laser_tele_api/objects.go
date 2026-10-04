@@ -1,6 +1,7 @@
 package laser_tele_api
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -183,9 +184,30 @@ type Update struct {
 }
 
 type LaserTeleConfigT struct {
-	APIKEY           string
-	Timeout          time.Duration
-	CallbackOnUpdate interface{}
+	APIKEY  string        // bot token, if empty it is taken from TG_API_KEY env or .APIKEY file
+	Timeout time.Duration // interval between requests of updates, if 0 it is taken from TIMEOUT env (default 10s)
+	// CallbackOnUpdate (optional) is called for every new update,
+	// in addition to the callback passed to LaserTeleRun
+	CallbackOnUpdate Callback
+}
+
+// APIError is returned when Telegram refused the request,
+// e.g. ErrorCode 403 if the bot was blocked by the user
+type APIError struct {
+	Method      string
+	ErrorCode   int
+	Description string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("telegram %s: %d %s", e.Method, e.ErrorCode, e.Description)
+}
+
+// common part of all Bot API responses
+type apiResponse struct {
+	Ok          bool   `json:"ok"`
+	ErrorCode   int    `json:"error_code"`
+	Description string `json:"description"`
 }
 
 func AddButton(text, callback string) Button {

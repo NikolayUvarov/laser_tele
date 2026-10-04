@@ -80,14 +80,8 @@ func doLaserTeleInit() {
 func DoLaserTeleInit(config LaserTeleConfigT) {
 	timeout = config.Timeout
 	APIKEY = config.APIKEY
-	switch callback := config.CallbackOnUpdate.(type) {
-	case nil:
-	case func(Update):
-		OnUpdateCallbackFunc = callback
-	case Callback:
-		OnUpdateCallbackFunc = callback
-	default:
-		fmt.Printf("CallbackOnUpdate has wrong type %T, expected func(Update)\n", callback)
+	if config.CallbackOnUpdate != nil {
+		OnUpdateCallbackFunc = config.CallbackOnUpdate
 	}
 	doLaserTeleInit()
 }
@@ -116,6 +110,15 @@ func hideKey(s string) string {
 	return strings.ReplaceAll(s, APIKEY, "<APIKEY>")
 }
 
+// hideKeyInError hides bot token in URL of the error returned by HTTP client
+func hideKeyInError(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		urlErr.URL = hideKey(urlErr.URL)
+	}
+	return err
+}
+
 // apiGet calls Bot API method with params and returns response body.
 // Request and response are written to log logName
 func apiGet(logName, method string, params url.Values) (string, error) {
@@ -127,9 +130,15 @@ func apiGet(logName, method string, params url.Values) (string, error) {
 
 	resp, err := httpGet(reqLink)
 	if err != nil {
+		err = hideKeyInError(err)
 		line2logfile(logName, "RESP: CONNECTION_ERROR "+err.Error())
 		return "", err
 	}
+	return readAPIResponse(logName, method, resp)
+}
+
+// readAPIResponse reads response of Bot API method and returns *APIError if Telegram refused the request
+func readAPIResponse(logName, method string, resp *http.Response) (string, error) {
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
@@ -138,6 +147,14 @@ func apiGet(logName, method string, params url.Values) (string, error) {
 		return "", err
 	}
 	line2logfile(logName, fmt.Sprintf("RESP: %d %s", resp.StatusCode, body))
+
+	var result apiResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", &APIError{Method: method, ErrorCode: resp.StatusCode, Description: "wrong response: " + err.Error()}
+	}
+	if !result.Ok {
+		return "", &APIError{Method: method, ErrorCode: result.ErrorCode, Description: result.Description}
+	}
 	return string(body), nil
 }
 
@@ -158,8 +175,8 @@ func UpdateRequest(callback Callback) {
 	}
 
 	var resultUpdate UpdateJSON
-	if err := json.Unmarshal([]byte(body), &resultUpdate); err != nil || !resultUpdate.Ok {
-		line2logfile("updateRequest", "RESP: BAD_RESPONSE")
+	if err := json.Unmarshal([]byte(body), &resultUpdate); err != nil {
+		line2logfile("updateRequest", "RESP: BAD_RESPONSE "+err.Error())
 		fmt.Println("Can't get updates")
 		return
 	}
@@ -178,6 +195,9 @@ func UpdateRequest(callback Callback) {
 		newUpdate.UpdateID = resultUpdate.Result[num].UpdateID
 		newUpdate.UpdateMessage = UpdateMessageT(resultUpdate.Result[num].Message)
 		newUpdate.CallbackQuery = UpdateCallBackQueryT(resultUpdate.Result[num].CallbackQuery)
+		if OnUpdateCallbackFunc != nil {
+			OnUpdateCallbackFunc(newUpdate)
+		}
 		if isChan {
 			TgChan <- newUpdate
 		}
@@ -188,11 +208,12 @@ func UpdateRequest(callback Callback) {
 }
 
 // Sends message to chat
-func SendMessage(chatID int, text string) {
+func SendMessage(chatID int, text string) error {
 	params := url.Values{}
 	params.Set("chat_id", strconv.Itoa(chatID))
 	params.Set("text", text)
-	apiGet("sendMessage", "sendMessage", params)
+	_, err := apiGet("sendMessage", "sendMessage", params)
+	return err
 }
 
 //TODO: function to edit message text
@@ -201,41 +222,40 @@ func SendMessage(chatID int, text string) {
 // }
 
 // Edit inline keyboard by message id
-func EditMessageReplyMarkup(chatID, messageID int, keyboard InlineKeyboard) {
+func EditMessageReplyMarkup(chatID, messageID int, keyboard InlineKeyboard) error {
 	keyboardBytes, err := json.Marshal(&keyboard)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return err
 	}
 	params := url.Values{}
 	params.Set("chat_id", strconv.Itoa(chatID))
 	params.Set("message_id", strconv.Itoa(messageID))
 	params.Set("reply_markup", string(keyboardBytes))
-	apiGet("editMessage", "editMessageReplyMarkup", params)
+	_, err = apiGet("editMessage", "editMessageReplyMarkup", params)
+	return err
 }
 
 // Sending prepared inline keyboard to chat. With text(optional)
-func SendKeyboard(chatID int, text string, keyboard InlineKeyboard) {
+func SendKeyboard(chatID int, text string, keyboard InlineKeyboard) error {
 	keyboardBytes, err := json.Marshal(&keyboard)
 	if err != nil {
-		fmt.Println(err)
-		return
+		return err
 	}
 	params := url.Values{}
 	params.Set("chat_id", strconv.Itoa(chatID))
 	params.Set("text", text)
 	params.Set("reply_markup", string(keyboardBytes))
-	apiGet("sendKeyboard", "sendMessage", params)
+	_, err = apiGet("sendKeyboard", "sendMessage", params)
+	return err
 }
 
 // sendFile uploads local file fileName to chat with Bot API method (sendPhoto, sendVideo...).
 // field is name of the form field for the file (photo, video...)
-func sendFile(logName, method, field string, chatID int, caption, fileName string) {
+func sendFile(logName, method, field string, chatID int, caption, fileName string) error {
 	file, err := os.Open(fileName)
 	if err != nil {
 		line2logfile(logName, "REQV: CANT_OPEN_FILE "+err.Error())
-		fmt.Println("Can't open file", fileName, err)
-		return
+		return err
 	}
 	defer file.Close()
 
@@ -254,8 +274,7 @@ func sendFile(logName, method, field string, chatID int, caption, fileName strin
 	}
 	if err != nil {
 		line2logfile(logName, "REQV: CANT_READ_FILE "+err.Error())
-		fmt.Println("Can't read file", fileName, err)
-		return
+		return err
 	}
 
 	reqLink := tgApiLinkKEY + "/" + method
@@ -263,28 +282,27 @@ func sendFile(logName, method, field string, chatID int, caption, fileName strin
 
 	resp, err := fileClient.Post(reqLink, writer.FormDataContentType(), body)
 	if err != nil {
+		err = hideKeyInError(err)
 		line2logfile(logName, "RESP: CONNECTION_ERROR "+err.Error())
-		return
+		return err
 	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(resp.Body)
-	line2logfile(logName, fmt.Sprintf("RESP: %d %s", resp.StatusCode, respBody))
+	_, err = readAPIResponse(logName, method, resp)
+	return err
 }
 
 // Sending photo to chat
-func SendPhoto(chatID int, text, photo string) {
-	sendFile("sendPhoto", "sendPhoto", "photo", chatID, text, photo)
+func SendPhoto(chatID int, text, photo string) error {
+	return sendFile("sendPhoto", "sendPhoto", "photo", chatID, text, photo)
 }
 
 // Sending video to chat
-func SendVideo(chatID int, text, video string) {
-	sendFile("sendVideo", "sendVideo", "video", chatID, text, video)
+func SendVideo(chatID int, text, video string) error {
+	return sendFile("sendVideo", "sendVideo", "video", chatID, text, video)
 }
 
 // Sending document to chat
-func SendDocument(chatID int, text, document string) {
-	sendFile("sendDocument", "sendDocument", "document", chatID, text, document)
+func SendDocument(chatID int, text, document string) error {
+	return sendFile("sendDocument", "sendDocument", "document", chatID, text, document)
 }
 
 // Loading a file from user message. Returns path to downloaded file or "" on error
