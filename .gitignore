@@ -1,0 +1,7 @@
+# bot token
+.APIKEY
+
+# runtime files of the bot
+*.log
+*.log.1
+downloadedFiles/

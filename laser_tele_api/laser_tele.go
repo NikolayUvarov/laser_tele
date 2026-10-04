@@ -1,424 +1,194 @@
 package laser_tele_api
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"mime/multipart"
 	"net/http"
 	"os"
-	"path"
-	"path/filepath"
-	"reflect"
-	"strconv"
-	"strings"
-	"time"
+	"sync"
 )
 
-const tgApiLink = "https://api.telegram.org/bot"
+// Package-level functions work with the default bot. It is created by DoLaserTeleInit
+// or on the first call (with APIKEY, TG_API_KEY env or .APIKEY file).
+// To work with several bots in one program use NewBot
 
-var APIKEY string
-var timeout time.Duration
-var httpGet = http.Get
-var isConfigDone bool = false
-
-var tgApiLinkKEY string
-var newUpdate Update
-var OnUpdateCallbackFunc func(Update)
-var TgChan chan Update
+var APIKEY string                     // token of the default bot
+var OnUpdateCallbackFunc func(Update) // called for every new update of the default bot
+var TgChan chan Update                // channel for updates of the default bot, created by MakeChan
 var isChan bool
 
-type Callback func(Update)
+var defaultBot *Bot
+var defaultBotMutex sync.Mutex
 
-// Function,that creates channel for sending updates
+// Function,that creates channel for sending updates.
+// Updates must be read from TgChan, otherwise processing of updates is blocked
 func MakeChan() {
+	if TgChan == nil {
+		TgChan = make(chan Update)
+	}
 	isChan = true
 }
 
-func doLaserTeleInit() {
-
-	//if APIKEY set via DoLaserTeleInit it will be not empty Else try to get from ENV or from file
-	if APIKEY == "" {
-		APIKEY = getEnvD("TG_API_KEY", "")
+// Initializing of the default bot, setting api key, timeout and logs via config.
+// Exits the program if APIKEY is not set
+func DoLaserTeleInit(config LaserTeleConfigT) {
+	if config.CallbackOnUpdate != nil {
+		OnUpdateCallbackFunc = config.CallbackOnUpdate
 	}
-	if APIKEY == "" {
+	// the default bot calls CallbackOnUpdate via OnUpdateCallbackFunc
+	config.CallbackOnUpdate = nil
+
+	if config.APIKEY == "" && os.Getenv("TG_API_KEY") == "" {
 		fmt.Println("ENV APIKEY is empty, try to read from .APIKEY file")
-		APIKEY = loadApiKeyFromFile(".APIKEY")
-		if APIKEY == "" {
-			fmt.Println("Please set APIKEY in ENV or in .APIKEY file!")
-			fmt.Println("Can't read APIKEY from file, exiting")
-			os.Exit(1)
+	}
+	bot, err := NewBot(config)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("Can't read APIKEY, exiting")
+		os.Exit(1)
+	}
+
+	defaultBotMutex.Lock()
+	defaultBot = bot
+	APIKEY = bot.apiKey
+	defaultBotMutex.Unlock()
+
+	fmt.Println("APIKEY is set")
+	fmt.Println("TIMEOUT: ", bot.timeout)
+}
+
+// getDefaultBot returns the default bot, it is created if it doesn't exist yet
+func getDefaultBot() (*Bot, error) {
+	defaultBotMutex.Lock()
+	defer defaultBotMutex.Unlock()
+	if defaultBot == nil {
+		bot, err := NewBot(LaserTeleConfigT{APIKEY: APIKEY})
+		if err != nil {
+			return nil, err
+		}
+		defaultBot = bot
+		APIKEY = bot.apiKey
+	}
+	return defaultBot, nil
+}
+
+// defaultHandler passes update of the default bot to OnUpdateCallbackFunc, TgChan and callback
+func defaultHandler(callback Callback) Callback {
+	return func(update Update) {
+		if OnUpdateCallbackFunc != nil {
+			OnUpdateCallbackFunc(update)
+		}
+		if isChan {
+			TgChan <- update
+		}
+		if callback != nil {
+			callback(update)
 		}
 	}
-	//if timeout is set via DoLaserTeleInit it will be not 0 Else try to get from ENV (defalut 10)
-	if timeout == 0 {
-		timeoutInt, _ := strconv.Atoi(getEnvD("TIMEOUT", "10"))
-		timeout = time.Duration(timeoutInt) * time.Second
-	}
-	tgApiLinkKEY = tgApiLink + "" + APIKEY
-	fmt.Println("APIKEY: ", APIKEY)
-	fmt.Println("TIMEOUT: ", timeout)
-	fmt.Println("tgApiLinkKEY: ", tgApiLinkKEY)
 }
 
-// Initializing of bot, setting api key and timeout via config
-func DoLaserTeleInit(config LaserTeleConfigT) {
-	timeout = config.Timeout
-	APIKEY = config.APIKEY
-	if config.CallbackOnUpdate != nil && reflect.TypeOf(config.CallbackOnUpdate).Kind() == reflect.Func {
-		//onUpdateCallbackFunc = reflect.ValueOf(onUpdateCallbackFunc).(func(Update))
-		//set to onUpdateCallbackFunc value of config.CallbackOnUpdate
-		OnUpdateCallbackFunc = config.CallbackOnUpdate.(func(Update))
-	}
-	doLaserTeleInit()
-}
-
-// Running bot, returning updates with callback
+// Running bot, returning updates with callback. Exits the program if APIKEY is not set
 func LaserTeleRun(callback Callback) {
-	fmt.Println("Started")
-	fmt.Println("Timeout: ", timeout)
-	getUpdatesCount := 0
-	for {
-		UpdateRequest(func(update Update) {
-			callback(update)
-		})
-		getUpdatesCount++
-		fmt.Println("Update", getUpdatesCount)
-		time.Sleep(timeout)
+	bot, err := getDefaultBot()
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("Can't read APIKEY, exiting")
+		os.Exit(1)
 	}
+	bot.run(defaultHandler(callback))
 }
 
 func UpdateRequest(callback Callback) {
-	reqLink := tgApiLinkKEY + "/getUpdates"
-	reqType := "GET"
-	var reqBody io.Reader = nil
-
-	line2logfile("updateRequest", fmt.Sprintf("REQV: %s %s %v", reqType, reqLink, reqBody))
-	req, err := http.NewRequest(reqType, reqLink, reqBody)
+	bot, err := getDefaultBot()
 	if err != nil {
-		line2logfile("updateRequest", "RESP: REQUEST_ERROR")
+		fmt.Println("Can't get updates:", err)
+		return
 	}
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
-
-	resp, err := httpGet(req.URL.String())
-
-	if err == nil {
-		buf := new(strings.Builder)
-		io.Copy(buf, resp.Body)
-
-		line2logfile("updateRequest", fmt.Sprintf("RESP: %d %s", resp.StatusCode, buf.String()))
-
-		var resultUpdate UpdateJSON
-		json.Unmarshal([]byte(buf.String()), &resultUpdate)
-		length := len(resultUpdate.Result)
-		fmt.Println(length)
-		if newUpdate.UpdateID == 0 {
-			if length != 0 {
-				newUpdate.UpdateID = resultUpdate.Result[length-1].UpdateID
-			} else {
-				newUpdate.UpdateID = 0
-			}
-		} else {
-			for newUpdate.UpdateID < resultUpdate.Result[length-1].UpdateID {
-				newUpdate.UpdateID++
-
-				for num := range resultUpdate.Result {
-					if resultUpdate.Result[num].UpdateID == newUpdate.UpdateID {
-						newUpdate.UpdateMessage = UpdateMessageT(resultUpdate.Result[num].Message)
-						newUpdate.CallbackQuery = UpdateCallBackQueryT(resultUpdate.Result[num].CallbackQuery)
-						fmt.Println(resultUpdate.Result[num].UpdateID)
-						fmt.Println(newUpdate.UpdateMessage)
-						if isChan {
-							TgChan <- newUpdate
-						}
-
-						callback(newUpdate)
-					}
-				}
-			}
-		}
-	} else {
-		line2logfile("updateRequest", "RESP: CONNECION_ERROR")
-		fmt.Println("Can't get updates")
-	}
-
+	bot.requestUpdates(defaultHandler(callback))
 }
 
 // Sends message to chat
-func SendMessage(chatID int, text string) {
-	reqLink := tgApiLinkKEY + "/sendMessage?chat_id=" + fmt.Sprint(chatID) + "&text=" + text
-	reqType := "GET"
-	var reqBody io.Reader = nil
-	line2logfile("sendMessage", fmt.Sprintf("REQV: %s %s %v", reqType, reqLink, reqBody))
-	req, err := http.NewRequest("GET", reqLink, nil)
+func SendMessage(chatID int, text string) error {
+	bot, err := getDefaultBot()
 	if err != nil {
-		fmt.Println("Error creating request")
+		return err
 	}
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
-	update, err := httpGet(req.URL.String())
-	if err != nil {
-		line2logfile("sendMessage", "RESP: ERROR_SENDING_MESSAGE")
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, update.Body)
-
-		line2logfile("sendMessage", fmt.Sprintf("RESP: %d %s", update.StatusCode, buf.String()))
-	}
+	return bot.SendMessage(chatID, text)
 }
 
-//TODO: function to edit message text
-// func editMessageText(messageID,text string){
-
-// }
-
 // Edit inline keyboard by message id
-func EditMessageReplyMarkup(chatID, messageID int, keyboard InlineKeyboard) {
-	keyboardBytes, err := json.Marshal(&keyboard)
+func EditMessageReplyMarkup(chatID, messageID int, keyboard InlineKeyboard) error {
+	bot, err := getDefaultBot()
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
-	reqLink := tgApiLinkKEY + "/editMessageReplyMarkup?chat_id=" + fmt.Sprint(chatID) + "&message_id=" + fmt.Sprint(messageID) + "&reply_markup=" + string(keyboardBytes)
-	reqType := "GET"
-	var reqBody io.Reader = nil
-	line2logfile("editMessage", fmt.Sprintf("REQV: %s %s %v", reqType, reqLink, reqBody))
-	req, err := http.NewRequest("GET", reqLink, nil)
-	if err != nil {
-		fmt.Println("Error creating request")
-	}
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
-	update, err := httpGet(req.URL.String())
-	if err != nil {
-		line2logfile("editMessage", "RESP: ERROR_SENDING_MESSAGE")
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, update.Body)
-
-		line2logfile("editMessage", fmt.Sprintf("RESP: %d %s", update.StatusCode, buf.String()))
-	}
+	return bot.EditMessageReplyMarkup(chatID, messageID, keyboard)
 }
 
 // Sending prepared inline keyboard to chat. With text(optional)
-func SendKeyboard(chatID int, text string, keyboard InlineKeyboard) {
-	keyboardBytes, err := json.Marshal(&keyboard)
+func SendKeyboard(chatID int, text string, keyboard InlineKeyboard) error {
+	bot, err := getDefaultBot()
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
-	reqLink := tgApiLinkKEY + "/sendMessage?chat_id=" + fmt.Sprint(chatID) + "&text=" + text + "&reply_markup=" + string(keyboardBytes)
-	reqType := "GET"
-	var reqBody io.Reader = nil
-	line2logfile("sendKeyboard", fmt.Sprintf("REQV: %s %s %v", reqType, reqLink, reqBody))
-	req, err := http.NewRequest("GET", reqLink, nil)
-	if err != nil {
-		fmt.Println("Error creating request")
-	}
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
-	update, err := httpGet(req.URL.String())
-	if err != nil {
-		line2logfile("sendMessage", "RESP: ERROR_SENDING_MESSAGE")
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, update.Body)
+	return bot.SendKeyboard(chatID, text, keyboard)
+}
 
-		line2logfile("sendMessage", fmt.Sprintf("RESP: %d %s", update.StatusCode, buf.String()))
+// AnswerCallbackQuery must be called when the user pressed an inline button
+// (update.CallbackQuery.ID != ""), otherwise Telegram shows progress on the button.
+// text (optional) is shown to the user as a notification
+func AnswerCallbackQuery(callbackQueryID, text string) error {
+	bot, err := getDefaultBot()
+	if err != nil {
+		return err
 	}
+	return bot.AnswerCallbackQuery(callbackQueryID, text)
 }
 
 // Sending photo to chat
-func SendPhoto(chatID int, text, photo string) {
-	reqLink := tgApiLinkKEY + "/sendPhoto?chat_id=" + fmt.Sprintf("%d", chatID) + "&caption=" + text
-	reqType := "POST"
-	fileDir, _ := os.Getwd()
-	fileName := photo
-	filePath := path.Join(fileDir, fileName)
-
-	file, _ := os.Open(filePath)
-	defer file.Close()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("photo", filepath.Base(file.Name()))
-	io.Copy(part, file)
-	writer.Close()
-
-	r, _ := http.NewRequest(reqType, reqLink, body)
-	r.Header.Add("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-	resp, err := client.Do(r)
-
+func SendPhoto(chatID int, text, photo string) error {
+	bot, err := getDefaultBot()
 	if err != nil {
-		line2logfile("sendPhoto", "RESP: ERROR_SENDING_PHOTO")
-
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, resp.Body)
-		fmt.Println(resp)
-		line2logfile("sendPhoto", fmt.Sprintf("RESP: %d %s", resp.StatusCode, buf.String()))
+		return err
 	}
-
+	return bot.SendPhoto(chatID, text, photo)
 }
 
 // Sending video to chat
-func SendVideo(chatID int, text, video string) {
-
-	reqLink := tgApiLinkKEY + "/sendVideo?chat_id=" + fmt.Sprint(chatID) + "&caption=" + text
-	reqType := "POST"
-	fileDir, _ := os.Getwd()
-	fileName := video
-	filePath := path.Join(fileDir, fileName)
-
-	file, _ := os.Open(filePath)
-	defer file.Close()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("video", filepath.Base(file.Name()))
-	io.Copy(part, file)
-	writer.Close()
-
-	r, _ := http.NewRequest(reqType, reqLink, body)
-	r.Header.Add("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-	resp, err := client.Do(r)
-
+func SendVideo(chatID int, text, video string) error {
+	bot, err := getDefaultBot()
 	if err != nil {
-		line2logfile("sendPhoto", "RESP: ERROR_SENDING_PHOTO")
-
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, resp.Body)
-		fmt.Println(resp)
-		line2logfile("sendPhoto", fmt.Sprintf("RESP: %d %s", resp.StatusCode, buf.String()))
+		return err
 	}
-
+	return bot.SendVideo(chatID, text, video)
 }
 
 // Sending document to chat
-func SendDocument(chatID int, text, document string) {
-	reqLink := tgApiLinkKEY + "/sendDocument?chat_id=" + fmt.Sprintf("%d", chatID) + "&caption=" + text
-	reqType := "POST"
-	fileDir, _ := os.Getwd()
-	fileName := document
-	filePath := path.Join(fileDir, fileName)
-
-	file, _ := os.Open(filePath)
-	defer file.Close()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("document", filepath.Base(file.Name()))
-	io.Copy(part, file)
-	writer.Close()
-
-	r, _ := http.NewRequest(reqType, reqLink, body)
-	r.Header.Add("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-	resp, err := client.Do(r)
-
+func SendDocument(chatID int, text, document string) error {
+	bot, err := getDefaultBot()
 	if err != nil {
-		line2logfile("sendPhoto", "RESP: ERROR_SENDING_PHOTO")
-
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, resp.Body)
-		fmt.Println(resp)
-		line2logfile("sendPhoto", fmt.Sprintf("RESP: %d %s", resp.StatusCode, buf.String()))
+		return err
 	}
-
+	return bot.SendDocument(chatID, text, document)
 }
 
-// Loading a file from user message
-func LoadFile(chatID int, fileID string) string {
-
-	fmt.Println(chatID, fileID)
-	tgApiLinkFile := "https://api.telegram.org/file/bot" + APIKEY
-	reqLink := tgApiLinkKEY + "/getFile?file_id=" + fileID
-	reqType := "GET"
-	var reqBody io.Reader = nil
-
-	line2logfile("updateRequest", fmt.Sprintf("REQV: %s %s %v", reqType, reqLink, reqBody))
-
-	req, err := http.NewRequest(reqType, reqLink, reqBody)
+// Loading a file from user message. Returns path to downloaded file
+func LoadFile(chatID int, fileID string) (string, error) {
+	bot, err := getDefaultBot()
 	if err != nil {
-		line2logfile("updateRequest", "RESP: REQUEST_ERROR")
+		return "", err
 	}
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
-
-	resp, err := httpGet(req.URL.String())
-
-	if err == nil {
-
-		buf := new(strings.Builder)
-		io.Copy(buf, resp.Body)
-
-		line2logfile("updateRequest", fmt.Sprintf("RESP: %d %s", resp.StatusCode, buf.String()))
-
-		var resultFile File
-		json.Unmarshal([]byte(buf.String()), &resultFile)
-		if resultFile.Ok {
-			filePath := resultFile.Result.FilePath
-			fileLink := tgApiLinkFile + "/" + filePath
-			FileDownload(fileLink, filePath)
-			//fmt.Println("Downloaded a file")
-			return "downloadedFiles/" + filePath
-		}
-
-	}
-	return ""
+	return bot.LoadFile(fileID)
 }
+
+// Downloads file by link reqString and saves it to downloadedFiles/filePath.
+// On error resp is nil and data contains error message
 func FileDownload(reqString, filePath string) (resp *http.Response, data []byte, contentType string) {
-
-	var err error
-	rrReq, _ := http.NewRequest("GET", reqString, nil)
-	client := &http.Client{}
-	resp, err = client.Do(rrReq)
-
-	if err != nil {
-		//fmt.Println("Cannot open addr " + reqString)
-		return nil, []byte("Cannot open addr " + reqString), ""
+	bot, err := getDefaultBot()
+	if err == nil {
+		resp, data, contentType, err = bot.downloadFile(reqString, filePath)
 	}
-	defer resp.Body.Close()
-
-	contentType = resp.Header["Content-Type"][0]
-	line2logfile("fileLoad", fmt.Sprintf("Response status: %s, Content-Type: %12s, Loading URL: %s\n", resp.Status, contentType, reqString))
-
-	data, err = io.ReadAll(resp.Body)
-
 	if err != nil {
-		//fmt.Println("Error reading data from remote " + reqString)
-		return nil, []byte("Error reading data from remote " + reqString), ""
+		return nil, []byte(err.Error()), ""
 	}
-
-	StringToFile("downloadedFiles/"+filePath, string(data))
 	return resp, data, contentType
-}
-func StringToFile(fileName string, str string) {
-	checkPath(fileName)
-	f, _ := os.Create(fileName)
-
-	f.WriteString(str)
-	f.Close()
-}
-
-// checkPath check if path to file exists and creates path if not. If meant to be path-to-file is directory - returns error
-func checkPath(path string) error {
-	dir := filepath.Dir(path)
-	fileInfo, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		os.MkdirAll(dir, 0750)
-		return nil
-	}
-	if fileInfo.IsDir() {
-		return errors.New("ISDIR")
-	}
-	return err
 }
