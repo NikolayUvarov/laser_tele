@@ -8,32 +8,41 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
-	"path"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
 )
 
 const tgApiLink = "https://api.telegram.org/bot"
+const tgApiFileLink = "https://api.telegram.org/file/bot"
 
 var APIKEY string
 var timeout time.Duration
-var httpGet = http.Get
+
+// Clients with timeouts, so a hung connection can't stall the bot forever
+var httpClient = &http.Client{Timeout: 60 * time.Second}
+var fileClient = &http.Client{Timeout: 10 * time.Minute}
+var httpGet = httpClient.Get
 var isConfigDone bool = false
 
 var tgApiLinkKEY string
 var newUpdate Update
+var isUpdatesInitialized bool
 var OnUpdateCallbackFunc func(Update)
 var TgChan chan Update
 var isChan bool
 
 type Callback func(Update)
 
-// Function,that creates channel for sending updates
+// Function,that creates channel for sending updates.
+// Updates must be read from TgChan, otherwise processing of updates is blocked
 func MakeChan() {
+	if TgChan == nil {
+		TgChan = make(chan Update)
+	}
 	isChan = true
 }
 
@@ -53,121 +62,137 @@ func doLaserTeleInit() {
 		}
 	}
 	//if timeout is set via DoLaserTeleInit it will be not 0 Else try to get from ENV (defalut 10)
-	if timeout == 0 {
-		timeoutInt, _ := strconv.Atoi(getEnvD("TIMEOUT", "10"))
+	if timeout <= 0 {
+		timeoutInt, err := strconv.Atoi(getEnvD("TIMEOUT", "10"))
+		if err != nil || timeoutInt <= 0 {
+			fmt.Println("Wrong TIMEOUT value, using default 10 seconds")
+			timeoutInt = 10
+		}
 		timeout = time.Duration(timeoutInt) * time.Second
 	}
-	tgApiLinkKEY = tgApiLink + "" + APIKEY
-	fmt.Println("APIKEY: ", APIKEY)
+	tgApiLinkKEY = tgApiLink + APIKEY
+	isConfigDone = true
+	fmt.Println("APIKEY is set")
 	fmt.Println("TIMEOUT: ", timeout)
-	fmt.Println("tgApiLinkKEY: ", tgApiLinkKEY)
 }
 
 // Initializing of bot, setting api key and timeout via config
 func DoLaserTeleInit(config LaserTeleConfigT) {
 	timeout = config.Timeout
 	APIKEY = config.APIKEY
-	if config.CallbackOnUpdate != nil && reflect.TypeOf(config.CallbackOnUpdate).Kind() == reflect.Func {
-		//onUpdateCallbackFunc = reflect.ValueOf(onUpdateCallbackFunc).(func(Update))
-		//set to onUpdateCallbackFunc value of config.CallbackOnUpdate
-		OnUpdateCallbackFunc = config.CallbackOnUpdate.(func(Update))
+	switch callback := config.CallbackOnUpdate.(type) {
+	case nil:
+	case func(Update):
+		OnUpdateCallbackFunc = callback
+	case Callback:
+		OnUpdateCallbackFunc = callback
+	default:
+		fmt.Printf("CallbackOnUpdate has wrong type %T, expected func(Update)\n", callback)
 	}
 	doLaserTeleInit()
 }
 
 // Running bot, returning updates with callback
 func LaserTeleRun(callback Callback) {
+	if !isConfigDone {
+		doLaserTeleInit()
+	}
 	fmt.Println("Started")
 	fmt.Println("Timeout: ", timeout)
 	getUpdatesCount := 0
 	for {
-		UpdateRequest(func(update Update) {
-			callback(update)
-		})
+		UpdateRequest(callback)
 		getUpdatesCount++
 		fmt.Println("Update", getUpdatesCount)
 		time.Sleep(timeout)
 	}
 }
 
-func UpdateRequest(callback Callback) {
-	reqLink := tgApiLinkKEY + "/getUpdates"
-	reqType := "GET"
-	var reqBody io.Reader = nil
+// hideKey replaces bot token in s, so it doesn't get to logs
+func hideKey(s string) string {
+	if APIKEY == "" {
+		return s
+	}
+	return strings.ReplaceAll(s, APIKEY, "<APIKEY>")
+}
 
-	line2logfile("updateRequest", fmt.Sprintf("REQV: %s %s %v", reqType, reqLink, reqBody))
-	req, err := http.NewRequest(reqType, reqLink, reqBody)
+// apiGet calls Bot API method with params and returns response body.
+// Request and response are written to log logName
+func apiGet(logName, method string, params url.Values) (string, error) {
+	reqLink := tgApiLinkKEY + "/" + method
+	if len(params) > 0 {
+		reqLink += "?" + params.Encode()
+	}
+	line2logfile(logName, "REQV: GET "+reqLink)
+
+	resp, err := httpGet(reqLink)
 	if err != nil {
-		line2logfile("updateRequest", "RESP: REQUEST_ERROR")
+		line2logfile(logName, "RESP: CONNECTION_ERROR "+err.Error())
+		return "", err
 	}
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
+	defer resp.Body.Close()
 
-	resp, err := httpGet(req.URL.String())
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		line2logfile(logName, "RESP: READ_ERROR "+err.Error())
+		return "", err
+	}
+	line2logfile(logName, fmt.Sprintf("RESP: %d %s", resp.StatusCode, body))
+	return string(body), nil
+}
 
-	if err == nil {
-		buf := new(strings.Builder)
-		io.Copy(buf, resp.Body)
+func UpdateRequest(callback Callback) {
+	params := url.Values{}
+	if !isUpdatesInitialized {
+		// on the first request only the last update is requested, older ones are dropped by Telegram
+		params.Set("offset", "-1")
+	} else if newUpdate.UpdateID != 0 {
+		// confirm processed updates, so Telegram doesn't send them again
+		params.Set("offset", strconv.Itoa(newUpdate.UpdateID+1))
+	}
 
-		line2logfile("updateRequest", fmt.Sprintf("RESP: %d %s", resp.StatusCode, buf.String()))
-
-		var resultUpdate UpdateJSON
-		json.Unmarshal([]byte(buf.String()), &resultUpdate)
-		length := len(resultUpdate.Result)
-		fmt.Println(length)
-		if newUpdate.UpdateID == 0 {
-			if length != 0 {
-				newUpdate.UpdateID = resultUpdate.Result[length-1].UpdateID
-			} else {
-				newUpdate.UpdateID = 0
-			}
-		} else {
-			for newUpdate.UpdateID < resultUpdate.Result[length-1].UpdateID {
-				newUpdate.UpdateID++
-
-				for num := range resultUpdate.Result {
-					if resultUpdate.Result[num].UpdateID == newUpdate.UpdateID {
-						newUpdate.UpdateMessage = UpdateMessageT(resultUpdate.Result[num].Message)
-						newUpdate.CallbackQuery = UpdateCallBackQueryT(resultUpdate.Result[num].CallbackQuery)
-						fmt.Println(resultUpdate.Result[num].UpdateID)
-						fmt.Println(newUpdate.UpdateMessage)
-						if isChan {
-							TgChan <- newUpdate
-						}
-
-						callback(newUpdate)
-					}
-				}
-			}
-		}
-	} else {
-		line2logfile("updateRequest", "RESP: CONNECION_ERROR")
+	body, err := apiGet("updateRequest", "getUpdates", params)
+	if err != nil {
 		fmt.Println("Can't get updates")
+		return
 	}
 
+	var resultUpdate UpdateJSON
+	if err := json.Unmarshal([]byte(body), &resultUpdate); err != nil || !resultUpdate.Ok {
+		line2logfile("updateRequest", "RESP: BAD_RESPONSE")
+		fmt.Println("Can't get updates")
+		return
+	}
+
+	length := len(resultUpdate.Result)
+	if !isUpdatesInitialized {
+		// updates received before start of the bot are skipped
+		isUpdatesInitialized = true
+		if length != 0 {
+			newUpdate.UpdateID = resultUpdate.Result[length-1].UpdateID
+		}
+		return
+	}
+
+	for num := range resultUpdate.Result {
+		newUpdate.UpdateID = resultUpdate.Result[num].UpdateID
+		newUpdate.UpdateMessage = UpdateMessageT(resultUpdate.Result[num].Message)
+		newUpdate.CallbackQuery = UpdateCallBackQueryT(resultUpdate.Result[num].CallbackQuery)
+		if isChan {
+			TgChan <- newUpdate
+		}
+		if callback != nil {
+			callback(newUpdate)
+		}
+	}
 }
 
 // Sends message to chat
 func SendMessage(chatID int, text string) {
-	reqLink := tgApiLinkKEY + "/sendMessage?chat_id=" + fmt.Sprint(chatID) + "&text=" + text
-	reqType := "GET"
-	var reqBody io.Reader = nil
-	line2logfile("sendMessage", fmt.Sprintf("REQV: %s %s %v", reqType, reqLink, reqBody))
-	req, err := http.NewRequest("GET", reqLink, nil)
-	if err != nil {
-		fmt.Println("Error creating request")
-	}
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
-	update, err := httpGet(req.URL.String())
-	if err != nil {
-		line2logfile("sendMessage", "RESP: ERROR_SENDING_MESSAGE")
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, update.Body)
-
-		line2logfile("sendMessage", fmt.Sprintf("RESP: %d %s", update.StatusCode, buf.String()))
-	}
+	params := url.Values{}
+	params.Set("chat_id", strconv.Itoa(chatID))
+	params.Set("text", text)
+	apiGet("sendMessage", "sendMessage", params)
 }
 
 //TODO: function to edit message text
@@ -180,26 +205,13 @@ func EditMessageReplyMarkup(chatID, messageID int, keyboard InlineKeyboard) {
 	keyboardBytes, err := json.Marshal(&keyboard)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
-	reqLink := tgApiLinkKEY + "/editMessageReplyMarkup?chat_id=" + fmt.Sprint(chatID) + "&message_id=" + fmt.Sprint(messageID) + "&reply_markup=" + string(keyboardBytes)
-	reqType := "GET"
-	var reqBody io.Reader = nil
-	line2logfile("editMessage", fmt.Sprintf("REQV: %s %s %v", reqType, reqLink, reqBody))
-	req, err := http.NewRequest("GET", reqLink, nil)
-	if err != nil {
-		fmt.Println("Error creating request")
-	}
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
-	update, err := httpGet(req.URL.String())
-	if err != nil {
-		line2logfile("editMessage", "RESP: ERROR_SENDING_MESSAGE")
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, update.Body)
-
-		line2logfile("editMessage", fmt.Sprintf("RESP: %d %s", update.StatusCode, buf.String()))
-	}
+	params := url.Values{}
+	params.Set("chat_id", strconv.Itoa(chatID))
+	params.Set("message_id", strconv.Itoa(messageID))
+	params.Set("reply_markup", string(keyboardBytes))
+	apiGet("editMessage", "editMessageReplyMarkup", params)
 }
 
 // Sending prepared inline keyboard to chat. With text(optional)
@@ -207,218 +219,147 @@ func SendKeyboard(chatID int, text string, keyboard InlineKeyboard) {
 	keyboardBytes, err := json.Marshal(&keyboard)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
-	reqLink := tgApiLinkKEY + "/sendMessage?chat_id=" + fmt.Sprint(chatID) + "&text=" + text + "&reply_markup=" + string(keyboardBytes)
-	reqType := "GET"
-	var reqBody io.Reader = nil
-	line2logfile("sendKeyboard", fmt.Sprintf("REQV: %s %s %v", reqType, reqLink, reqBody))
-	req, err := http.NewRequest("GET", reqLink, nil)
-	if err != nil {
-		fmt.Println("Error creating request")
-	}
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
-	update, err := httpGet(req.URL.String())
-	if err != nil {
-		line2logfile("sendMessage", "RESP: ERROR_SENDING_MESSAGE")
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, update.Body)
+	params := url.Values{}
+	params.Set("chat_id", strconv.Itoa(chatID))
+	params.Set("text", text)
+	params.Set("reply_markup", string(keyboardBytes))
+	apiGet("sendKeyboard", "sendMessage", params)
+}
 
-		line2logfile("sendMessage", fmt.Sprintf("RESP: %d %s", update.StatusCode, buf.String()))
+// sendFile uploads local file fileName to chat with Bot API method (sendPhoto, sendVideo...).
+// field is name of the form field for the file (photo, video...)
+func sendFile(logName, method, field string, chatID int, caption, fileName string) {
+	file, err := os.Open(fileName)
+	if err != nil {
+		line2logfile(logName, "REQV: CANT_OPEN_FILE "+err.Error())
+		fmt.Println("Can't open file", fileName, err)
+		return
 	}
+	defer file.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	writer.WriteField("chat_id", strconv.Itoa(chatID))
+	if caption != "" {
+		writer.WriteField("caption", caption)
+	}
+	part, err := writer.CreateFormFile(field, filepath.Base(fileName))
+	if err == nil {
+		_, err = io.Copy(part, file)
+	}
+	if err == nil {
+		err = writer.Close()
+	}
+	if err != nil {
+		line2logfile(logName, "REQV: CANT_READ_FILE "+err.Error())
+		fmt.Println("Can't read file", fileName, err)
+		return
+	}
+
+	reqLink := tgApiLinkKEY + "/" + method
+	line2logfile(logName, fmt.Sprintf("REQV: POST %s chat_id=%d %s=%s caption=%q", reqLink, chatID, field, fileName, caption))
+
+	resp, err := fileClient.Post(reqLink, writer.FormDataContentType(), body)
+	if err != nil {
+		line2logfile(logName, "RESP: CONNECTION_ERROR "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	line2logfile(logName, fmt.Sprintf("RESP: %d %s", resp.StatusCode, respBody))
 }
 
 // Sending photo to chat
 func SendPhoto(chatID int, text, photo string) {
-	reqLink := tgApiLinkKEY + "/sendPhoto?chat_id=" + fmt.Sprintf("%d", chatID) + "&caption=" + text
-	reqType := "POST"
-	fileDir, _ := os.Getwd()
-	fileName := photo
-	filePath := path.Join(fileDir, fileName)
-
-	file, _ := os.Open(filePath)
-	defer file.Close()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("photo", filepath.Base(file.Name()))
-	io.Copy(part, file)
-	writer.Close()
-
-	r, _ := http.NewRequest(reqType, reqLink, body)
-	r.Header.Add("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-	resp, err := client.Do(r)
-
-	if err != nil {
-		line2logfile("sendPhoto", "RESP: ERROR_SENDING_PHOTO")
-
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, resp.Body)
-		fmt.Println(resp)
-		line2logfile("sendPhoto", fmt.Sprintf("RESP: %d %s", resp.StatusCode, buf.String()))
-	}
-
+	sendFile("sendPhoto", "sendPhoto", "photo", chatID, text, photo)
 }
 
 // Sending video to chat
 func SendVideo(chatID int, text, video string) {
-
-	reqLink := tgApiLinkKEY + "/sendVideo?chat_id=" + fmt.Sprint(chatID) + "&caption=" + text
-	reqType := "POST"
-	fileDir, _ := os.Getwd()
-	fileName := video
-	filePath := path.Join(fileDir, fileName)
-
-	file, _ := os.Open(filePath)
-	defer file.Close()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("video", filepath.Base(file.Name()))
-	io.Copy(part, file)
-	writer.Close()
-
-	r, _ := http.NewRequest(reqType, reqLink, body)
-	r.Header.Add("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-	resp, err := client.Do(r)
-
-	if err != nil {
-		line2logfile("sendPhoto", "RESP: ERROR_SENDING_PHOTO")
-
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, resp.Body)
-		fmt.Println(resp)
-		line2logfile("sendPhoto", fmt.Sprintf("RESP: %d %s", resp.StatusCode, buf.String()))
-	}
-
+	sendFile("sendVideo", "sendVideo", "video", chatID, text, video)
 }
 
 // Sending document to chat
 func SendDocument(chatID int, text, document string) {
-	reqLink := tgApiLinkKEY + "/sendDocument?chat_id=" + fmt.Sprintf("%d", chatID) + "&caption=" + text
-	reqType := "POST"
-	fileDir, _ := os.Getwd()
-	fileName := document
-	filePath := path.Join(fileDir, fileName)
-
-	file, _ := os.Open(filePath)
-	defer file.Close()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-	part, _ := writer.CreateFormFile("document", filepath.Base(file.Name()))
-	io.Copy(part, file)
-	writer.Close()
-
-	r, _ := http.NewRequest(reqType, reqLink, body)
-	r.Header.Add("Content-Type", writer.FormDataContentType())
-
-	client := &http.Client{}
-	resp, err := client.Do(r)
-
-	if err != nil {
-		line2logfile("sendPhoto", "RESP: ERROR_SENDING_PHOTO")
-
-	} else {
-		buf := new(strings.Builder)
-		io.Copy(buf, resp.Body)
-		fmt.Println(resp)
-		line2logfile("sendPhoto", fmt.Sprintf("RESP: %d %s", resp.StatusCode, buf.String()))
-	}
-
+	sendFile("sendDocument", "sendDocument", "document", chatID, text, document)
 }
 
-// Loading a file from user message
+// Loading a file from user message. Returns path to downloaded file or "" on error
 func LoadFile(chatID int, fileID string) string {
-
-	fmt.Println(chatID, fileID)
-	tgApiLinkFile := "https://api.telegram.org/file/bot" + APIKEY
-	reqLink := tgApiLinkKEY + "/getFile?file_id=" + fileID
-	reqType := "GET"
-	var reqBody io.Reader = nil
-
-	line2logfile("updateRequest", fmt.Sprintf("REQV: %s %s %v", reqType, reqLink, reqBody))
-
-	req, err := http.NewRequest(reqType, reqLink, reqBody)
+	params := url.Values{}
+	params.Set("file_id", fileID)
+	body, err := apiGet("loadFile", "getFile", params)
 	if err != nil {
-		line2logfile("updateRequest", "RESP: REQUEST_ERROR")
+		return ""
 	}
-	q := req.URL.Query()
-	req.URL.RawQuery = q.Encode()
 
-	resp, err := httpGet(req.URL.String())
-
-	if err == nil {
-
-		buf := new(strings.Builder)
-		io.Copy(buf, resp.Body)
-
-		line2logfile("updateRequest", fmt.Sprintf("RESP: %d %s", resp.StatusCode, buf.String()))
-
-		var resultFile File
-		json.Unmarshal([]byte(buf.String()), &resultFile)
-		if resultFile.Ok {
-			filePath := resultFile.Result.FilePath
-			fileLink := tgApiLinkFile + "/" + filePath
-			FileDownload(fileLink, filePath)
-			//fmt.Println("Downloaded a file")
-			return "downloadedFiles/" + filePath
-		}
-
+	var resultFile File
+	if err := json.Unmarshal([]byte(body), &resultFile); err != nil || !resultFile.Ok {
+		return ""
 	}
-	return ""
+	filePath := resultFile.Result.FilePath
+	fileLink := tgApiFileLink + APIKEY + "/" + filePath
+	if resp, _, _ := FileDownload(fileLink, filePath); resp == nil {
+		return ""
+	}
+	return "downloadedFiles/" + filePath
 }
+
 func FileDownload(reqString, filePath string) (resp *http.Response, data []byte, contentType string) {
 
 	var err error
-	rrReq, _ := http.NewRequest("GET", reqString, nil)
-	client := &http.Client{}
-	resp, err = client.Do(rrReq)
-
+	resp, err = fileClient.Get(reqString)
 	if err != nil {
-		//fmt.Println("Cannot open addr " + reqString)
-		return nil, []byte("Cannot open addr " + reqString), ""
+		line2logfile("fileLoad", "RESP: CONNECTION_ERROR "+err.Error())
+		return nil, []byte("Cannot open addr " + hideKey(reqString)), ""
 	}
 	defer resp.Body.Close()
 
-	contentType = resp.Header["Content-Type"][0]
-	line2logfile("fileLoad", fmt.Sprintf("Response status: %s, Content-Type: %12s, Loading URL: %s\n", resp.Status, contentType, reqString))
-
-	data, err = io.ReadAll(resp.Body)
-
-	if err != nil {
-		//fmt.Println("Error reading data from remote " + reqString)
-		return nil, []byte("Error reading data from remote " + reqString), ""
+	contentType = resp.Header.Get("Content-Type")
+	line2logfile("fileLoad", fmt.Sprintf("Response status: %s, Content-Type: %12s, Loading URL: %s", resp.Status, contentType, reqString))
+	if resp.StatusCode != http.StatusOK {
+		return nil, []byte("Bad response status " + resp.Status + " from " + hideKey(reqString)), ""
 	}
 
-	StringToFile("downloadedFiles/"+filePath, string(data))
+	data, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, []byte("Error reading data from remote " + hideKey(reqString)), ""
+	}
+
+	if err := saveFile("downloadedFiles/"+filePath, data); err != nil {
+		line2logfile("fileLoad", "CANT_SAVE_FILE "+err.Error())
+		return nil, []byte("Error saving file " + filePath + ": " + err.Error()), ""
+	}
 	return resp, data, contentType
 }
-func StringToFile(fileName string, str string) {
-	checkPath(fileName)
-	f, _ := os.Create(fileName)
 
-	f.WriteString(str)
-	f.Close()
+func StringToFile(fileName string, str string) {
+	if err := saveFile(fileName, []byte(str)); err != nil {
+		fmt.Println("Can't save file", fileName, err)
+	}
+}
+
+func saveFile(fileName string, data []byte) error {
+	if err := checkPath(fileName); err != nil {
+		return err
+	}
+	return os.WriteFile(fileName, data, 0644)
 }
 
 // checkPath check if path to file exists and creates path if not. If meant to be path-to-file is directory - returns error
 func checkPath(path string) error {
-	dir := filepath.Dir(path)
 	fileInfo, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		os.MkdirAll(dir, 0750)
-		return nil
+		return os.MkdirAll(filepath.Dir(path), 0750)
+	}
+	if err != nil {
+		return err
 	}
 	if fileInfo.IsDir() {
 		return errors.New("ISDIR")
 	}
-	return err
+	return nil
 }

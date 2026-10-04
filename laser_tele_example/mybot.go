@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	laser_tele "../laser_tele_api"
+	laser_tele "github.com/NikolayUvarov/laser_tele/laser_tele_api"
 )
 
 func myOnUpdate(u laser_tele.Update) {
@@ -71,7 +71,7 @@ func botLogic(processedUpdate laser_tele.Update) {
 		laser_tele.LoadFile(processedUpdate.UpdateMessage.Chat.ID, processedUpdate.UpdateMessage.Document.FileID)
 
 	} else {
-		laser_tele.SendMessage(processedUpdate.UpdateMessage.Chat.ID, fmt.Sprint(processedUpdate.UpdateMessage)+"%0AID:"+fmt.Sprint(processedUpdate.UpdateID))
+		laser_tele.SendMessage(processedUpdate.UpdateMessage.Chat.ID, fmt.Sprint(processedUpdate.UpdateMessage)+"\nID:"+fmt.Sprint(processedUpdate.UpdateID))
 		//if defined onUpdateCallbackFunc function, call it
 		if laser_tele.OnUpdateCallbackFunc != nil {
 			laser_tele.OnUpdateCallbackFunc(processedUpdate)

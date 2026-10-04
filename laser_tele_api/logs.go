@@ -1,20 +1,19 @@
 package laser_tele_api
 
 import (
+	"fmt"
 	"log"
 	"os"
 )
 
 // function makes new log record
 func line2logfile(logName, line string) {
-	f, err := os.OpenFile(logName+".log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0750)
+	f, err := os.OpenFile(logName+".log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0640)
 	if err != nil {
-		_, err := os.Create(logName + ".log")
-		if err != nil {
-			log.Fatal("Error creating log file: ", err)
-		}
+		fmt.Println("Can't open log file: ", err)
+		return
 	}
 	defer f.Close()
-	log.SetOutput(f)
-	log.Println(logName, " ", line)
+	// own logger, so output of the standard logger used by application is not changed
+	log.New(f, "", log.LstdFlags).Println(logName, " ", hideKey(line))
 }
