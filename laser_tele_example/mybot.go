@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	laser_tele "github.com/NikolayUvarov/laser_tele/laser_tele_api"
+	laser_tele "github.com/NikolayUvarov/laser_tele/v2/laser_tele_api"
 )
 
 func myOnUpdate(u laser_tele.Update) {

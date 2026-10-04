@@ -1,10 +1,10 @@
 # Reference
 
 All functions of the package, generated from the sources. Examples are in the [guides](README.md),
-[examples/](../examples) and on [pkg.go.dev](https://pkg.go.dev/github.com/NikolayUvarov/laser_tele/laser_tele_api).
+[examples/](../examples) and on [pkg.go.dev](https://pkg.go.dev/github.com/NikolayUvarov/laser_tele/v2/laser_tele_api).
 
 ```go
-import laser_tele "github.com/NikolayUvarov/laser_tele/laser_tele_api"
+import laser_tele "github.com/NikolayUvarov/laser_tele/v2/laser_tele_api"
 ```
 
 Package-level functions work with the default bot (`DoLaserTeleInit`). A `Bot` created by `NewBot` has a method

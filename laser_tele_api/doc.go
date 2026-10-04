@@ -2,7 +2,7 @@
 //
 // Import it as laser_tele:
 //
-//	import laser_tele "github.com/NikolayUvarov/laser_tele/laser_tele_api"
+//	import laser_tele "github.com/NikolayUvarov/laser_tele/v2/laser_tele_api"
 //
 // # Quick start
 //

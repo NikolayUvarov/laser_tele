@@ -5,11 +5,11 @@ answering messages and buttons, files, polls, inline mode, payments in Telegram 
 group management and business accounts. Methods of the Bot API without their own function can be called with `Call`.
 
 ```
-go get github.com/NikolayUvarov/laser_tele/laser_tele_api
+go get github.com/NikolayUvarov/laser_tele/v2/laser_tele_api
 ```
 
 ```go
-import laser_tele "github.com/NikolayUvarov/laser_tele/laser_tele_api"
+import laser_tele "github.com/NikolayUvarov/laser_tele/v2/laser_tele_api"
 ```
 
 ## Guides
@@ -48,4 +48,4 @@ TG_API_KEY=123456:ABC-DEF go run ./examples/echo
 | [channel](../examples/channel/main.go) | processing updates in several goroutines |
 | [laser_tele_example](../laser_tele_example/mybot.go) | everything together |
 
-The API reference with examples is also on [pkg.go.dev](https://pkg.go.dev/github.com/NikolayUvarov/laser_tele/laser_tele_api).
+The API reference with examples is also on [pkg.go.dev](https://pkg.go.dev/github.com/NikolayUvarov/laser_tele/v2/laser_tele_api).
