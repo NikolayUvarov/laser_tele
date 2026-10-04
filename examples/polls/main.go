@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	laser_tele "github.com/NikolayUvarov/laser_tele/laser_tele_api"
+	laser_tele "github.com/NikolayUvarov/laser_tele/v2/laser_tele_api"
 )
 
 // the last poll in every chat: chat ID -> message ID

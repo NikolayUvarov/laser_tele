@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	laser_tele "github.com/NikolayUvarov/laser_tele/laser_tele_api"
+	laser_tele "github.com/NikolayUvarov/laser_tele/v2/laser_tele_api"
 )
 
 // An echo bot. The token is taken from the TG_API_KEY environment variable or the .APIKEY file

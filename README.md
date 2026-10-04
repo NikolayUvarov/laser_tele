@@ -18,7 +18,7 @@ Visionary Director: [https://github.com/NikolayUvarov]
 ## Install
 
 ```
-go get github.com/NikolayUvarov/laser_tele/laser_tele_api
+go get github.com/NikolayUvarov/laser_tele/v2/laser_tele_api
 ```
 
 ## Quick start
@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"time"
 
-	laser_tele "github.com/NikolayUvarov/laser_tele/laser_tele_api"
+	laser_tele "github.com/NikolayUvarov/laser_tele/v2/laser_tele_api"
 )
 
 func main() {
@@ -64,7 +64,7 @@ The token is taken from `LaserTeleConfigT.APIKEY`, the `TG_API_KEY` environment 
   [payments](docs/payments.md), [games](docs/games.md), [groups, reactions and business accounts](docs/chats.md),
   [errors and logs](docs/errors-and-logs.md)
 - [Reference of all functions](docs/reference.md)
-- [API on pkg.go.dev](https://pkg.go.dev/github.com/NikolayUvarov/laser_tele/laser_tele_api) with examples
+- [API on pkg.go.dev](https://pkg.go.dev/github.com/NikolayUvarov/laser_tele/v2/laser_tele_api) with examples
 
 ## Examples
 
@@ -77,6 +77,12 @@ and everything together in [laser_tele_example](laser_tele_example/mybot.go).
 ```
 TG_API_KEY=123456789:AAH... go run ./examples/keyboard
 ```
+
+## Versions
+
+Versions are git tags `vX.Y.Z`. Since v2 the import path ends with `/v2`:
+`github.com/NikolayUvarov/laser_tele/v2/laser_tele_api`. To update a program written for older commits,
+change the import path and run `go get github.com/NikolayUvarov/laser_tele/v2/laser_tele_api@latest`.
 
 ## License
 
