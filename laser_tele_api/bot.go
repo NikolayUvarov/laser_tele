@@ -39,7 +39,10 @@ type Bot struct {
 	updates     chan Update
 	logger      *logger
 
+	allowedUpdates string // JSON list of update types for getUpdates
+
 	httpGet    func(string) (*http.Response, error)
+	httpPost   func(url, contentType string, body io.Reader) (*http.Response, error)
 	fileClient *http.Client
 
 	// used only by the goroutine requesting updates
@@ -81,16 +84,27 @@ func NewBot(config LaserTeleConfigT) (*Bot, error) {
 		downloadDir = defaultDownloadDir
 	}
 
+	allowedUpdates := config.AllowedUpdates
+	if len(allowedUpdates) == 0 {
+		allowedUpdates = AllUpdateTypes
+	}
+	allowedUpdatesJSON, err := json.Marshal(allowedUpdates)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Bot{
-		apiKey:      apiKey,
-		timeout:     timeout,
-		apiLink:     tgApiLink + apiKey,
-		fileLink:    tgApiFileLink + apiKey,
-		downloadDir: downloadDir,
-		onUpdate:    config.CallbackOnUpdate,
-		logger:      logger,
-		httpGet:     httpClient.Get,
-		fileClient:  fileClient,
+		apiKey:         apiKey,
+		timeout:        timeout,
+		apiLink:        tgApiLink + apiKey,
+		fileLink:       tgApiFileLink + apiKey,
+		downloadDir:    downloadDir,
+		onUpdate:       config.CallbackOnUpdate,
+		logger:         logger,
+		allowedUpdates: string(allowedUpdatesJSON),
+		httpGet:        httpClient.Get,
+		httpPost:       httpClient.Post,
+		fileClient:     fileClient,
 	}, nil
 }
 
@@ -142,6 +156,7 @@ func (b *Bot) handler(callback Callback) Callback {
 
 func (b *Bot) requestUpdates(handle Callback) {
 	params := url.Values{}
+	params.Set("allowed_updates", b.allowedUpdates)
 	if !b.isUpdatesInitialized {
 		// on the first request only the last update is requested, older ones are dropped by Telegram
 		params.Set("offset", "-1")
@@ -249,9 +264,67 @@ func (b *Bot) readAPIResponse(logName, method string, resp *http.Response) (stri
 		return "", &APIError{Method: method, ErrorCode: resp.StatusCode, Description: "wrong response: " + parseErr.Error()}
 	}
 	if !result.Ok {
-		return "", &APIError{Method: method, ErrorCode: result.ErrorCode, Description: result.Description}
+		return "", &APIError{
+			Method:          method,
+			ErrorCode:       result.ErrorCode,
+			Description:     result.Description,
+			RetryAfter:      result.Parameters.RetryAfter,
+			MigrateToChatID: result.Parameters.MigrateToChatID,
+		}
 	}
 	return string(body), nil
+}
+
+// Call calls any Bot API method (https://core.telegram.org/bots/api#available-methods) with params
+// (a struct or a map, sent as JSON) and returns the "result" field of the response.
+// Use it for methods that have no own function in the library
+func (b *Bot) Call(method string, params interface{}) (json.RawMessage, error) {
+	return b.callJSON("call", method, params)
+}
+
+// callJSON sends params as JSON to Bot API method and returns the "result" field of the response.
+// Request and response are written to log logName
+func (b *Bot) callJSON(logName, method string, params interface{}) (json.RawMessage, error) {
+	body, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+	reqLink := b.apiLink + "/" + method
+	if b.logger.mode == LogFull {
+		b.log(logName, fmt.Sprintf("REQV: POST %s %s", reqLink, body))
+	} else {
+		b.log(logName, "REQV: POST "+method+" "+jsonParamsWithoutContent(body))
+	}
+
+	resp, err := b.httpPost(reqLink, "application/json", bytes.NewReader(body))
+	if err != nil {
+		err = b.hideKeyInError(err)
+		b.log(logName, "RESP: CONNECTION_ERROR "+err.Error())
+		return nil, err
+	}
+	respBody, err := b.readAPIResponse(logName, method, resp)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(respBody), &result); err != nil {
+		return nil, err
+	}
+	return result.Result, nil
+}
+
+// callInto calls Bot API method with params and decodes the result of the response to result (if not nil)
+func (b *Bot) callInto(logName, method string, params interface{}, result interface{}) error {
+	raw, err := b.callJSON(logName, method, params)
+	if err != nil || result == nil {
+		return err
+	}
+	if err := json.Unmarshal(raw, result); err != nil {
+		return &APIError{Method: method, Description: "wrong result: " + err.Error()}
+	}
+	return nil
 }
 
 // Sends message to chat

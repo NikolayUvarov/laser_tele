@@ -37,8 +37,9 @@ func TestMain(m *testing.M) {
 }
 
 type request struct {
-	Method      string     // Bot API method
-	Params      url.Values // query or form params
+	Method      string                 // Bot API method
+	Params      url.Values             // query or form params
+	JSON        map[string]interface{} // params sent as JSON
 	FileField   string
 	FileName    string
 	FileContent string
@@ -82,7 +83,9 @@ func (tg *fakeTelegram) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req := request{Method: method, Params: r.URL.Query()}
-	if r.Method == http.MethodPost {
+	if r.Header.Get("Content-Type") == "application/json" {
+		json.NewDecoder(r.Body).Decode(&req.JSON)
+	} else if r.Method == http.MethodPost {
 		if err := r.ParseMultipartForm(1 << 20); err == nil {
 			req.Params = r.MultipartForm.Value
 			for field, files := range r.MultipartForm.File {
@@ -161,6 +164,7 @@ func connectToFake(t *testing.T, bot *Bot, tg *fakeTelegram) {
 	bot.apiLink = server.URL + "/bot" + bot.apiKey
 	bot.fileLink = server.URL + "/file/bot" + bot.apiKey
 	bot.httpGet = server.Client().Get
+	bot.httpPost = server.Client().Post
 	bot.fileClient = server.Client()
 }
 
@@ -300,7 +304,7 @@ func TestUpdateTypes(t *testing.T) {
 		testUpdate(5, "my_chat_member", blocked),
 		testUpdate(6, "message", location),
 		testUpdate(7, "message", group),
-		testUpdate(8, "poll", map[string]interface{}{"id": "poll1"}),
+		testUpdate(8, "future_update", map[string]interface{}{"id": "unknown"}),
 	)
 
 	got := collect(bot)
@@ -308,7 +312,8 @@ func TestUpdateTypes(t *testing.T) {
 	for _, u := range got {
 		types = append(types, u.Type())
 	}
-	wantTypes := []string{"message", "edited_message", "channel_post", "callback_query", "my_chat_member", "message", "message", ""}
+	// unknown kinds of updates are named too and can be read from Raw
+	wantTypes := []string{"message", "edited_message", "channel_post", "callback_query", "my_chat_member", "message", "message", "future_update"}
 	if !reflect.DeepEqual(types, wantTypes) {
 		t.Fatalf("Expected types %v, but got %v", wantTypes, types)
 	}
@@ -345,6 +350,14 @@ func TestUpdateTypes(t *testing.T) {
 	}
 	if g := got[6].UpdateMessage; g.Chat.Title != "Laser team" || g.Chat.Type != "supergroup" || g.Entities[0].Type != "bot_command" {
 		t.Errorf("Wrong group message: %+v", g)
+	}
+	var future struct {
+		FutureUpdate struct {
+			ID string `json:"id"`
+		} `json:"future_update"`
+	}
+	if err := json.Unmarshal(got[7].Raw, &future); err != nil || future.FutureUpdate.ID != "unknown" {
+		t.Errorf("Wrong raw update: %s %v", got[7].Raw, err)
 	}
 }
 
