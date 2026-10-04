@@ -1,6 +1,7 @@
 package laser_tele_api
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
@@ -82,13 +83,33 @@ func hideKey(s, apiKey string) string {
 	return strings.ReplaceAll(s, apiKey, "<APIKEY>")
 }
 
+// params without texts of messages, they are logged in LogWithoutContent mode
+var paramsToLog = []string{
+	"chat_id", "message_id", "inline_message_id", "user_id", "offset", "file_id", "ok",
+	"callback_query_id", "inline_query_id", "guest_query_id", "shipping_query_id", "pre_checkout_query_id",
+	"business_connection_id", "game_short_name",
+}
+
 // paramsWithoutContent leaves only params without texts of messages, for LogWithoutContent mode
 func paramsWithoutContent(params url.Values) string {
 	safe := url.Values{}
-	for _, name := range []string{"chat_id", "message_id", "offset", "callback_query_id", "file_id"} {
+	for _, name := range paramsToLog {
 		if value, ok := params[name]; ok {
 			safe[name] = value
 		}
 	}
 	return safe.Encode()
+}
+
+// jsonParamsWithoutContent is paramsWithoutContent for params sent as JSON object
+func jsonParamsWithoutContent(body []byte) string {
+	var params map[string]json.RawMessage
+	if err := json.Unmarshal(body, &params); err != nil {
+		return ""
+	}
+	values := url.Values{}
+	for name, value := range params {
+		values.Set(name, strings.Trim(string(value), `"`))
+	}
+	return paramsWithoutContent(values)
 }
