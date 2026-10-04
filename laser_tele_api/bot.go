@@ -24,6 +24,7 @@ const defaultDownloadDir = "downloadedFiles"
 var httpClient = &http.Client{Timeout: 60 * time.Second}
 var fileClient = &http.Client{Timeout: 10 * time.Minute}
 
+// Callback processes an update
 type Callback func(Update)
 
 // Bot is a Telegram bot, it must be created with NewBot.
@@ -117,7 +118,7 @@ func (b *Bot) MakeChan() chan Update {
 	return b.updates
 }
 
-// Run requests updates every timeout interval and passes them like UpdateRequest. It never returns
+// Run requests updates every Timeout and passes each of them like UpdateRequest. It never returns
 func (b *Bot) Run(callback Callback) {
 	b.run(b.handler(callback))
 }
@@ -327,7 +328,7 @@ func (b *Bot) callInto(logName, method string, params interface{}, result interf
 	return nil
 }
 
-// Sends message to chat
+// SendMessage sends a text message to the chat
 func (b *Bot) SendMessage(chatID int, text string) error {
 	params := url.Values{}
 	params.Set("chat_id", strconv.Itoa(chatID))
@@ -336,12 +337,7 @@ func (b *Bot) SendMessage(chatID int, text string) error {
 	return err
 }
 
-//TODO: function to edit message text
-// func editMessageText(messageID,text string){
-
-// }
-
-// Edit inline keyboard by message id
+// EditMessageReplyMarkup changes the inline keyboard of a message sent by the bot, an empty keyboard removes it
 func (b *Bot) EditMessageReplyMarkup(chatID, messageID int, keyboard InlineKeyboard) error {
 	keyboardBytes, err := json.Marshal(&keyboard)
 	if err != nil {
@@ -355,7 +351,7 @@ func (b *Bot) EditMessageReplyMarkup(chatID, messageID int, keyboard InlineKeybo
 	return err
 }
 
-// Sending prepared inline keyboard to chat. With text(optional)
+// SendKeyboard sends a message with text and an inline keyboard
 func (b *Bot) SendKeyboard(chatID int, text string, keyboard InlineKeyboard) error {
 	keyboardBytes, err := json.Marshal(&keyboard)
 	if err != nil {
@@ -427,22 +423,23 @@ func (b *Bot) sendFile(logName, method, field string, chatID int, caption, fileN
 	return err
 }
 
-// Sending photo to chat
+// SendPhoto uploads a local photo file to the chat, text is the caption
 func (b *Bot) SendPhoto(chatID int, text, photo string) error {
 	return b.sendFile("sendPhoto", "sendPhoto", "photo", chatID, text, photo)
 }
 
-// Sending video to chat
+// SendVideo uploads a local video file to the chat, text is the caption
 func (b *Bot) SendVideo(chatID int, text, video string) error {
 	return b.sendFile("sendVideo", "sendVideo", "video", chatID, text, video)
 }
 
-// Sending document to chat
+// SendDocument uploads a local file to the chat as a document, text is the caption
 func (b *Bot) SendDocument(chatID int, text, document string) error {
 	return b.sendFile("sendDocument", "sendDocument", "document", chatID, text, document)
 }
 
-// Loading a file from user message to DownloadDir. Returns path to downloaded file
+// LoadFile downloads a file sent by a user (its file_id) to DownloadDir and returns its path.
+// Bots can download files up to 20 MB
 func (b *Bot) LoadFile(fileID string) (string, error) {
 	params := url.Values{}
 	params.Set("file_id", fileID)

@@ -32,6 +32,7 @@ func loadApiKeyFromFile(fname string) (APIKEY string) {
 	return strings.TrimSpace(string(data))
 }
 
+// StringToFile writes str to fileName, creating its directories
 func StringToFile(fileName string, str string) {
 	if err := saveFile(fileName, []byte(str)); err != nil {
 		fmt.Println("Can't save file", fileName, err)

@@ -2,12 +2,14 @@ package laser_tele_api
 
 // Telegram sends updates about reactions only if the bot is an administrator in the chat
 
+// ReactionType is a reaction: an emoji, a custom emoji or a paid reaction
 type ReactionType struct {
 	Type          string `json:"type"` // "emoji", "custom_emoji" or "paid"
 	Emoji         string `json:"emoji,omitempty"`
 	CustomEmojiID string `json:"custom_emoji_id,omitempty"`
 }
 
+// ReactionCount is the number of reactions of one type
 type ReactionCount struct {
 	Type       ReactionType `json:"type"`
 	TotalCount int          `json:"total_count"`
