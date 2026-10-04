@@ -1,5 +1,6 @@
 package laser_tele_api
 
+// Poll is a poll or a quiz (Message.Poll), also sent as a poll update when its state changes
 type Poll struct {
 	ID                    string          `json:"id"`
 	Question              string          `json:"question"`
@@ -20,6 +21,7 @@ type Poll struct {
 	Description           string          `json:"description"`
 }
 
+// PollOption is an answer option of a poll with the number of votes
 type PollOption struct {
 	PersistentID string          `json:"persistent_id"`
 	Text         string          `json:"text"`

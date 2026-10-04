@@ -11,16 +11,22 @@ import (
 // or on the first call (with APIKEY, TG_API_KEY env or .APIKEY file).
 // To work with several bots in one program use NewBot
 
-var APIKEY string                     // token of the default bot
-var OnUpdateCallbackFunc func(Update) // called for every new update of the default bot
-var TgChan chan Update                // channel for updates of the default bot, created by MakeChan
+// APIKEY is the token of the default bot
+var APIKEY string
+
+// OnUpdateCallbackFunc is called for every new update of the default bot (CallbackOnUpdate of the config)
+var OnUpdateCallbackFunc func(Update)
+
+// TgChan is the channel for updates of the default bot, it is created by MakeChan
+var TgChan chan Update
+
 var isChan bool
 
 var defaultBot *Bot
 var defaultBotMutex sync.Mutex
 
-// Function,that creates channel for sending updates.
-// Updates must be read from TgChan, otherwise processing of updates is blocked
+// MakeChan creates the channel TgChan, to which updates of the default bot are sent.
+// It must be called before LaserTeleRun. Updates must be read from TgChan, otherwise processing of updates is blocked
 func MakeChan() {
 	if TgChan == nil {
 		TgChan = make(chan Update)
@@ -28,8 +34,7 @@ func MakeChan() {
 	isChan = true
 }
 
-// Initializing of the default bot, setting api key, timeout and logs via config.
-// Exits the program if APIKEY is not set
+// DoLaserTeleInit configures the default bot with config. It exits the program if the token is not found
 func DoLaserTeleInit(config LaserTeleConfigT) {
 	if config.CallbackOnUpdate != nil {
 		OnUpdateCallbackFunc = config.CallbackOnUpdate
@@ -86,7 +91,9 @@ func defaultHandler(callback Callback) Callback {
 	}
 }
 
-// Running bot, returning updates with callback. Exits the program if APIKEY is not set
+// LaserTeleRun requests updates of the default bot every Timeout and passes each of them
+// to OnUpdateCallbackFunc, TgChan (if MakeChan was called) and callback.
+// It never returns and exits the program if the token is not found
 func LaserTeleRun(callback Callback) {
 	bot, err := getDefaultBot()
 	if err != nil {
@@ -97,6 +104,8 @@ func LaserTeleRun(callback Callback) {
 	bot.run(defaultHandler(callback))
 }
 
+// UpdateRequest requests new updates of the default bot once and passes each of them
+// to OnUpdateCallbackFunc, TgChan (if MakeChan was called) and callback
 func UpdateRequest(callback Callback) {
 	bot, err := getDefaultBot()
 	if err != nil {
@@ -106,7 +115,7 @@ func UpdateRequest(callback Callback) {
 	bot.requestUpdates(defaultHandler(callback))
 }
 
-// Sends message to chat
+// SendMessage sends a text message to the chat
 func SendMessage(chatID int, text string) error {
 	bot, err := getDefaultBot()
 	if err != nil {
@@ -115,7 +124,7 @@ func SendMessage(chatID int, text string) error {
 	return bot.SendMessage(chatID, text)
 }
 
-// Edit inline keyboard by message id
+// EditMessageReplyMarkup changes the inline keyboard of a message sent by the bot, an empty keyboard removes it
 func EditMessageReplyMarkup(chatID, messageID int, keyboard InlineKeyboard) error {
 	bot, err := getDefaultBot()
 	if err != nil {
@@ -124,7 +133,7 @@ func EditMessageReplyMarkup(chatID, messageID int, keyboard InlineKeyboard) erro
 	return bot.EditMessageReplyMarkup(chatID, messageID, keyboard)
 }
 
-// Sending prepared inline keyboard to chat. With text(optional)
+// SendKeyboard sends a message with text and an inline keyboard
 func SendKeyboard(chatID int, text string, keyboard InlineKeyboard) error {
 	bot, err := getDefaultBot()
 	if err != nil {
@@ -144,7 +153,7 @@ func AnswerCallbackQuery(callbackQueryID, text string) error {
 	return bot.AnswerCallbackQuery(callbackQueryID, text)
 }
 
-// Sending photo to chat
+// SendPhoto uploads a local photo file to the chat, text is the caption
 func SendPhoto(chatID int, text, photo string) error {
 	bot, err := getDefaultBot()
 	if err != nil {
@@ -153,7 +162,7 @@ func SendPhoto(chatID int, text, photo string) error {
 	return bot.SendPhoto(chatID, text, photo)
 }
 
-// Sending video to chat
+// SendVideo uploads a local video file to the chat, text is the caption
 func SendVideo(chatID int, text, video string) error {
 	bot, err := getDefaultBot()
 	if err != nil {
@@ -162,7 +171,7 @@ func SendVideo(chatID int, text, video string) error {
 	return bot.SendVideo(chatID, text, video)
 }
 
-// Sending document to chat
+// SendDocument uploads a local file to the chat as a document, text is the caption
 func SendDocument(chatID int, text, document string) error {
 	bot, err := getDefaultBot()
 	if err != nil {
@@ -171,7 +180,8 @@ func SendDocument(chatID int, text, document string) error {
 	return bot.SendDocument(chatID, text, document)
 }
 
-// Loading a file from user message. Returns path to downloaded file
+// LoadFile downloads a file sent by a user (its file_id) to DownloadDir and returns its path.
+// chatID is not used
 func LoadFile(chatID int, fileID string) (string, error) {
 	bot, err := getDefaultBot()
 	if err != nil {
@@ -180,8 +190,8 @@ func LoadFile(chatID int, fileID string) (string, error) {
 	return bot.LoadFile(fileID)
 }
 
-// Downloads file by link reqString and saves it to downloadedFiles/filePath.
-// On error resp is nil and data contains error message
+// FileDownload downloads the file by link reqString and saves it to filePath in DownloadDir of the default bot.
+// On error resp is nil and data contains the error message
 func FileDownload(reqString, filePath string) (resp *http.Response, data []byte, contentType string) {
 	bot, err := getDefaultBot()
 	if err == nil {

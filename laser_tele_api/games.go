@@ -4,6 +4,7 @@ package laser_tele_api
 // When the user presses the "Play" button, a callback query with GameShortName is sent,
 // answer it with AnswerCallbackQueryWithConfig and the URL of the game
 
+// Game is a game sent by SendGame (Message.Game)
 type Game struct {
 	Title        string          `json:"title"`
 	Description  string          `json:"description"`
@@ -13,6 +14,7 @@ type Game struct {
 	Animation    Animation       `json:"animation"`
 }
 
+// GameHighScore is one row of the high scores table of a game
 type GameHighScore struct {
 	Position int  `json:"position"`
 	User     User `json:"user"`

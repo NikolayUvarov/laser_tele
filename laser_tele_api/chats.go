@@ -2,6 +2,7 @@ package laser_tele_api
 
 // Updates about chats: join requests, boosts, business accounts, managed bots
 
+// ChatInviteLink is an invite link to a chat
 type ChatInviteLink struct {
 	InviteLink              string `json:"invite_link"`
 	Creator                 User   `json:"creator"`
@@ -28,6 +29,7 @@ type ChatJoinRequest struct {
 	QueryID    string         `json:"query_id"`
 }
 
+// ChatBoostSource is the source of a chat boost
 type ChatBoostSource struct {
 	Source            string `json:"source"` // "premium", "gift_code" or "giveaway"
 	User              User   `json:"user"`
@@ -36,6 +38,7 @@ type ChatBoostSource struct {
 	IsUnclaimed       bool   `json:"is_unclaimed"`
 }
 
+// ChatBoost is a boost added to a chat
 type ChatBoost struct {
 	BoostID        string          `json:"boost_id"`
 	AddDate        int             `json:"add_date"`
@@ -43,11 +46,13 @@ type ChatBoost struct {
 	Source         ChatBoostSource `json:"source"`
 }
 
+// ChatBoostUpdated is sent when a boost was added to a chat or changed
 type ChatBoostUpdated struct {
 	Chat  Chat      `json:"chat"`
 	Boost ChatBoost `json:"boost"`
 }
 
+// ChatBoostRemoved is sent when a boost was removed from a chat
 type ChatBoostRemoved struct {
 	Chat       Chat            `json:"chat"`
 	BoostID    string          `json:"boost_id"`
@@ -55,6 +60,7 @@ type ChatBoostRemoved struct {
 	Source     ChatBoostSource `json:"source"`
 }
 
+// BusinessBotRights are rights of the bot in a connected business account
 type BusinessBotRights struct {
 	CanReply                   bool `json:"can_reply"`
 	CanReadMessages            bool `json:"can_read_messages"`
@@ -84,6 +90,7 @@ type BusinessConnection struct {
 	IsEnabled  bool              `json:"is_enabled"`
 }
 
+// BusinessMessagesDeleted is sent when messages were deleted in a connected business account
 type BusinessMessagesDeleted struct {
 	BusinessConnectionID string `json:"business_connection_id"`
 	Chat                 Chat   `json:"chat"`

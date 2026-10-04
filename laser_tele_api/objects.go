@@ -12,6 +12,7 @@ import (
 // Only ReplyToMessage, PinnedMessage and Location are pointers and are nil if absent.
 // Fields not described here can be read from Update.Raw.
 
+// User is a Telegram user or bot
 type User struct {
 	ID           int    `json:"id"`
 	IsBot        bool   `json:"is_bot"`
@@ -21,6 +22,7 @@ type User struct {
 	LanguageCode string `json:"language_code"`
 }
 
+// Chat is a private chat, group, supergroup or channel
 type Chat struct {
 	ID        int    `json:"id"`
 	Type      string `json:"type"`  // "private", "group", "supergroup" or "channel"
@@ -43,6 +45,7 @@ type MessageEntity struct {
 	CustomEmojiID string `json:"custom_emoji_id"`
 }
 
+// PhotoSize is one size of a photo or a thumbnail
 type PhotoSize struct {
 	FileID       string `json:"file_id"`
 	FileUniqueID string `json:"file_unique_id"`
@@ -51,6 +54,7 @@ type PhotoSize struct {
 	FileSize     int    `json:"file_size"`
 }
 
+// Video is a video file
 type Video struct {
 	FileID       string `json:"file_id"`
 	FileUniqueID string `json:"file_unique_id"`
@@ -62,6 +66,7 @@ type Video struct {
 	FileSize     int    `json:"file_size"`
 }
 
+// Animation is a GIF or H.264/MPEG-4 AVC video without sound
 type Animation struct {
 	FileID       string `json:"file_id"`
 	FileUniqueID string `json:"file_unique_id"`
@@ -73,6 +78,7 @@ type Animation struct {
 	FileSize     int    `json:"file_size"`
 }
 
+// Audio is a music file
 type Audio struct {
 	FileID       string `json:"file_id"`
 	FileUniqueID string `json:"file_unique_id"`
@@ -84,6 +90,7 @@ type Audio struct {
 	FileSize     int    `json:"file_size"`
 }
 
+// Document is a general file
 type Document struct {
 	FileID       string `json:"file_id"`
 	FileUniqueID string `json:"file_unique_id"`
@@ -92,6 +99,7 @@ type Document struct {
 	FileSize     int    `json:"file_size"`
 }
 
+// Voice is a voice note
 type Voice struct {
 	FileID       string `json:"file_id"`
 	FileUniqueID string `json:"file_unique_id"`
@@ -100,6 +108,7 @@ type Voice struct {
 	FileSize     int    `json:"file_size"`
 }
 
+// VideoNote is a round video message
 type VideoNote struct {
 	FileID       string `json:"file_id"`
 	FileUniqueID string `json:"file_unique_id"`
@@ -108,6 +117,7 @@ type VideoNote struct {
 	FileSize     int    `json:"file_size"`
 }
 
+// Sticker is a sticker
 type Sticker struct {
 	FileID       string `json:"file_id"`
 	FileUniqueID string `json:"file_unique_id"`
@@ -121,6 +131,7 @@ type Sticker struct {
 	FileSize     int    `json:"file_size"`
 }
 
+// Contact is a phone contact
 type Contact struct {
 	PhoneNumber string `json:"phone_number"`
 	FirstName   string `json:"first_name"`
@@ -129,6 +140,7 @@ type Contact struct {
 	VCard       string `json:"vcard"`
 }
 
+// Location is a point on the map
 type Location struct {
 	Latitude           float64 `json:"latitude"`
 	Longitude          float64 `json:"longitude"`
@@ -148,6 +160,7 @@ type MessageOrigin struct {
 	AuthorSignature string `json:"author_signature"`
 }
 
+// Venue is a place with a name and an address
 type Venue struct {
 	Location        Location `json:"location"`
 	Title           string   `json:"title"`
@@ -175,6 +188,7 @@ type ReplyMarkup struct {
 	InlineKeyboard []Row `json:"inline_keyboard"`
 }
 
+// Message is a message of any kind: text, photo, poll, payment, service message...
 type Message struct {
 	MessageID       int  `json:"message_id"`
 	MessageThreadID int  `json:"message_thread_id"` // topic in forum supergroups
@@ -326,6 +340,7 @@ type Update struct {
 	kind string
 }
 
+// UnmarshalJSON decodes the update and remembers its kind (Type) and the received JSON (Raw)
 func (u *Update) UnmarshalJSON(data []byte) error {
 	type plainUpdate Update // without methods, so this function is not called recursively
 	if err := json.Unmarshal(data, (*plainUpdate)(u)); err != nil {
@@ -392,15 +407,19 @@ func (u Update) Type() string {
 	return ""
 }
 
-// Old names of the types, kept for compatibility
+// UpdateMessageT is the old name of Message, kept for compatibility
 type UpdateMessageT = Message
+
+// UpdateCallBackQueryT is the old name of CallbackQuery, kept for compatibility
 type UpdateCallBackQueryT = CallbackQuery
 
+// UpdateJSON is the response of getUpdates
 type UpdateJSON struct {
 	Ok     bool     `json:"ok"`
 	Result []Update `json:"result"`
 }
 
+// File is the response of getFile
 type File struct {
 	Ok     bool `json:"ok"`
 	Result struct {
@@ -426,11 +445,16 @@ type Button struct {
 
 // CallbackGame is a placeholder for Button.CallbackGame
 type CallbackGame struct{}
+
+// Row is a row of buttons of an inline keyboard
 type Row []Button
+
+// InlineKeyboard is a keyboard attached to a message, see SendKeyboard
 type InlineKeyboard struct {
 	Keyboard []Row `json:"inline_keyboard"`
 }
 
+// LaserTeleConfigT is the configuration of a bot for NewBot and DoLaserTeleInit. All fields are optional
 type LaserTeleConfigT struct {
 	APIKEY  string        // bot token, if empty it is taken from TG_API_KEY env or .APIKEY file
 	Timeout time.Duration // interval between requests of updates, if 0 it is taken from TIMEOUT env (default 10s)
@@ -458,6 +482,7 @@ type APIError struct {
 	MigrateToChatID int // the group was upgraded to a supergroup with this ID
 }
 
+// Error returns the description of the error with the method and the code
 func (e *APIError) Error() string {
 	return fmt.Sprintf("telegram %s: %d %s", e.Method, e.ErrorCode, e.Description)
 }
@@ -473,6 +498,7 @@ type apiResponse struct {
 	} `json:"parameters"`
 }
 
+// AddButton creates a button, which sends callback (CallbackQuery.Data) to the bot when pressed
 func AddButton(text, callback string) Button {
 	var newButton Button
 	newButton.Text = text

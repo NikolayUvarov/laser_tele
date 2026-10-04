@@ -4,6 +4,7 @@ package laser_tele_api
 // The flow: SendInvoice -> (ShippingQuery -> AnswerShippingQuery, only for IsFlexible invoices) ->
 // PreCheckoutQuery -> AnswerPreCheckoutQuery within 10 seconds -> message with SuccessfulPayment -> deliver the goods
 
+// Invoice is an invoice sent by SendInvoice (Message.Invoice)
 type Invoice struct {
 	Title          string `json:"title"`
 	Description    string `json:"description"`
@@ -12,6 +13,7 @@ type Invoice struct {
 	TotalAmount    int    `json:"total_amount"` // in the smallest units of the currency (cents...)
 }
 
+// ShippingAddress is the address entered by the user
 type ShippingAddress struct {
 	CountryCode string `json:"country_code"`
 	State       string `json:"state"`
@@ -21,6 +23,7 @@ type ShippingAddress struct {
 	PostCode    string `json:"post_code"`
 }
 
+// OrderInfo is the information about the order entered by the user
 type OrderInfo struct {
 	Name            string          `json:"name"`
 	PhoneNumber     string          `json:"phone_number"`
@@ -28,6 +31,7 @@ type OrderInfo struct {
 	ShippingAddress ShippingAddress `json:"shipping_address"`
 }
 
+// SuccessfulPayment is the information about a successful payment (Message.SuccessfulPayment)
 type SuccessfulPayment struct {
 	Currency                   string    `json:"currency"`
 	TotalAmount                int       `json:"total_amount"`
@@ -41,6 +45,7 @@ type SuccessfulPayment struct {
 	ProviderPaymentChargeID    string    `json:"provider_payment_charge_id"`
 }
 
+// RefundedPayment is the information about a refunded payment (Message.RefundedPayment)
 type RefundedPayment struct {
 	Currency                string `json:"currency"`
 	TotalAmount             int    `json:"total_amount"`
@@ -81,11 +86,13 @@ type BotSubscriptionUpdated struct {
 	State          string `json:"state"` // "canceled", "active" or "failed"
 }
 
+// LabeledPrice is a part of the price, e.g. the goods, the delivery, the tax
 type LabeledPrice struct {
 	Label  string `json:"label"`
 	Amount int    `json:"amount"` // in the smallest units of the currency (cents...), in Stars for "XTR"
 }
 
+// ShippingOption is a way of delivery for AnswerShippingQuery
 type ShippingOption struct {
 	ID     string         `json:"id"`
 	Title  string         `json:"title"`
