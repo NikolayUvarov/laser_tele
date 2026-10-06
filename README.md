@@ -13,6 +13,7 @@ Visionary Director: [https://github.com/NikolayUvarov]
 - Polls and quizzes, inline mode, payments in Telegram Stars and through providers, games, reactions, join requests, business accounts
 - Several bots in one program
 - Errors with Telegram's codes, logs without texts of messages and with rotation; the token never gets to logs and errors
+- HTTP and SOCKS5 proxies (`Proxy` in the config or `HTTPS_PROXY` env), local Bot API servers (`APIURL`)
 - `Call` for any other method of the Bot API
 
 ## Install

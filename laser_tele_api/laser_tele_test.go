@@ -502,15 +502,15 @@ func TestConnectionErrorHidesKey(t *testing.T) {
 		return nil, &url.Error{Op: "Get", URL: link, Err: errors.New("connection refused")}
 	}
 
-	err := bot.SendMessage(1, "text")
+	err := bot.SendMessage(1, "secret text")
 	var urlErr *url.Error
 	if !errors.As(err, &urlErr) {
 		t.Fatalf("Expected url.Error, but got %v", err)
 	}
-	if strings.Contains(err.Error(), testAPIKEY) {
-		t.Errorf("Error contains APIKEY: %v", err)
+	if strings.Contains(err.Error(), testAPIKEY) || strings.Contains(err.Error(), "secret") || !strings.Contains(err.Error(), "/sendMessage") {
+		t.Errorf("Error contains APIKEY or the text: %v", err)
 	}
-	if log := readLog(t, bot, "sendMessage"); strings.Contains(log, testAPIKEY) || !strings.Contains(log, "CONNECTION_ERROR") {
+	if log := readLog(t, bot, "sendMessage"); strings.Contains(log, testAPIKEY) || strings.Contains(log, "secret") || !strings.Contains(log, "CONNECTION_ERROR") {
 		t.Errorf("Wrong log: %s", log)
 	}
 }

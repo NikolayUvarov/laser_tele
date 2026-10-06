@@ -83,6 +83,21 @@ func hideKey(s, apiKey string) string {
 	return strings.ReplaceAll(s, apiKey, "<APIKEY>")
 }
 
+// hidePassword hides the password in a URL like http://user:password@host
+func hidePassword(link string) string {
+	scheme := strings.Index(link, "://")
+	at := strings.LastIndex(link, "@")
+	if scheme < 0 || at < scheme {
+		return link
+	}
+	credentials := link[scheme+3 : at]
+	colon := strings.Index(credentials, ":")
+	if colon < 0 {
+		return link
+	}
+	return link[:scheme+3] + credentials[:colon] + ":***" + link[at:]
+}
+
 // params without texts of messages, they are logged in LogWithoutContent mode
 var paramsToLog = []string{
 	"chat_id", "message_id", "inline_message_id", "user_id", "offset", "file_id", "ok",

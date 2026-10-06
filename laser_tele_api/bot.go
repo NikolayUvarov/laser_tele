@@ -16,13 +16,16 @@ import (
 	"time"
 )
 
-const tgApiLink = "https://api.telegram.org/bot"
-const tgApiFileLink = "https://api.telegram.org/file/bot"
+const defaultAPIURL = "https://api.telegram.org"
 const defaultDownloadDir = "downloadedFiles"
 
-// Clients with timeouts, so a hung connection can't stall the bot forever
-var httpClient = &http.Client{Timeout: 60 * time.Second}
-var fileClient = &http.Client{Timeout: 10 * time.Minute}
+// Timeouts of requests, so a hung connection can't stall the bot forever
+const apiTimeout = 60 * time.Second
+const fileTimeout = 10 * time.Minute
+
+// Clients of bots without their own Proxy, they use HTTPS_PROXY env
+var httpClient = &http.Client{Timeout: apiTimeout}
+var fileClient = &http.Client{Timeout: fileTimeout}
 
 // Callback processes an update
 type Callback func(Update)
@@ -94,19 +97,65 @@ func NewBot(config LaserTeleConfigT) (*Bot, error) {
 		return nil, err
 	}
 
+	apiURL := strings.TrimRight(config.APIURL, "/")
+	if apiURL == "" {
+		apiURL = defaultAPIURL
+	} else if u, err := url.Parse(apiURL); err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return nil, fmt.Errorf("wrong APIURL %q: it must be like https://host:port", apiURL)
+	}
+
+	apiClient, filesClient := httpClient, fileClient
+	if config.Proxy != "" {
+		proxyURL, err := parseProxy(config.Proxy)
+		if err != nil {
+			return nil, err
+		}
+		var transport *http.Transport
+		if defaultTransport, ok := http.DefaultTransport.(*http.Transport); ok {
+			transport = defaultTransport.Clone()
+		} else {
+			transport = &http.Transport{}
+		}
+		transport.Proxy = http.ProxyURL(proxyURL)
+		apiClient = &http.Client{Timeout: apiTimeout, Transport: transport}
+		filesClient = &http.Client{Timeout: fileTimeout, Transport: transport}
+	}
+
 	return &Bot{
 		apiKey:         apiKey,
 		timeout:        timeout,
-		apiLink:        tgApiLink + apiKey,
-		fileLink:       tgApiFileLink + apiKey,
+		apiLink:        apiURL + "/bot" + apiKey,
+		fileLink:       apiURL + "/file/bot" + apiKey,
 		downloadDir:    downloadDir,
 		onUpdate:       config.CallbackOnUpdate,
 		logger:         logger,
 		allowedUpdates: string(allowedUpdatesJSON),
-		httpGet:        httpClient.Get,
-		httpPost:       httpClient.Post,
-		fileClient:     fileClient,
+		httpGet:        apiClient.Get,
+		httpPost:       apiClient.Post,
+		fileClient:     filesClient,
 	}, nil
+}
+
+// parseProxy parses Proxy of the config: http://user:password@host:port, socks5://host:port...
+// An address without a scheme is an HTTP proxy
+func parseProxy(proxy string) (*url.URL, error) {
+	if !strings.Contains(proxy, "://") {
+		proxy = "http://" + proxy
+	}
+	proxyURL, err := url.Parse(proxy)
+	// the error of url.Parse isn't returned, it contains the password
+	if err != nil || proxyURL.Host == "" {
+		return nil, fmt.Errorf("wrong Proxy %s: it must be like http://user:password@host:port or socks5://host:port", hidePassword(proxy))
+	}
+	switch proxyURL.Scheme {
+	case "http", "https", "socks5":
+	case "socks5h":
+		// net/http sends host names to a SOCKS5 proxy, so socks5 already works like socks5h
+		proxyURL.Scheme = "socks5"
+	default:
+		return nil, fmt.Errorf("wrong Proxy %s: the scheme must be http, https, socks5 or socks5h", hidePassword(proxy))
+	}
+	return proxyURL, nil
 }
 
 // MakeChan creates the channel, to which updates are sent, and returns it. It must be called before Run.
@@ -207,11 +256,13 @@ func (b *Bot) log(logName, line string) {
 	b.logger.write(logName, line)
 }
 
-// hideKeyInError hides bot token in URL of the error returned by HTTP client
+// hideKeyInError hides bot token in URL of the error returned by HTTP client and removes params of the URL,
+// so texts of messages don't get to errors and logs
 func (b *Bot) hideKeyInError(err error) error {
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
-		urlErr.URL = hideKey(urlErr.URL, b.apiKey)
+		link, _, _ := strings.Cut(urlErr.URL, "?")
+		urlErr.URL = hideKey(link, b.apiKey)
 	}
 	return err
 }

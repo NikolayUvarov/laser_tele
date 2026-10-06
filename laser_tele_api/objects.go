@@ -470,6 +470,12 @@ type LaserTeleConfigT struct {
 	// The larger file is renamed to <name>.log.1, the previous <name>.log.1 is deleted
 	LogMaxSize  int64
 	DownloadDir string // directory for files downloaded by LoadFile, default "downloadedFiles"
+	// Proxy for requests to Telegram: http://user:password@host:port or socks5://user:password@host:port.
+	// If empty, HTTPS_PROXY and NO_PROXY env are used
+	Proxy string
+	// APIURL is the address of the Bot API server, default https://api.telegram.org.
+	// Set it for a local Bot API server (https://github.com/tdlib/telegram-bot-api)
+	APIURL string
 }
 
 // APIError is returned when Telegram refused the request,

@@ -79,6 +79,8 @@ All fields of `LaserTeleConfigT` are optional:
 | `LogDir` | the current directory | directory of the log files |
 | `LogMaxSize` | 10 MB | size of a log file when it is rotated |
 | `DownloadDir` | `downloadedFiles` | directory for files downloaded by `LoadFile` |
+| `Proxy` | `HTTPS_PROXY` env | proxy for requests to Telegram, see below |
+| `APIURL` | `https://api.telegram.org` | address of the Bot API server |
 
 ```go
 laser_tele.DoLaserTeleInit(laser_tele.LaserTeleConfigT{
@@ -88,6 +90,33 @@ laser_tele.DoLaserTeleInit(laser_tele.LaserTeleConfigT{
 	DownloadDir:    "files",
 })
 ```
+
+### Proxy
+
+Requests to Telegram go through the proxy from `HTTPS_PROXY` and `NO_PROXY` environment variables, if they are set.
+`Proxy` sets a proxy for one bot, the environment is ignored then:
+
+```go
+bot, err := laser_tele.NewBot(laser_tele.LaserTeleConfigT{
+	Proxy: "socks5://user:password@127.0.0.1:1080",
+})
+```
+
+HTTP (`http://user:password@host:3128`, or just `host:3128`), HTTPS and SOCKS5 (`socks5://` or `socks5h://`,
+host names are resolved by the proxy) proxies are supported, the user and the password are optional.
+The password doesn't get to errors. MTProxy is a proxy only for Telegram apps, it can't be used by bots.
+
+### Bot API server
+
+`APIURL` sends requests to another [Bot API server](https://github.com/tdlib/telegram-bot-api) instead of
+`https://api.telegram.org`, e.g. a local one or a reverse proxy:
+
+```go
+bot, err := laser_tele.NewBot(laser_tele.LaserTeleConfigT{APIURL: "http://localhost:8081"})
+```
+
+A local server started with `--local` returns paths of files on its disk instead of links,
+`LoadFile` can't download such files: read them from the disk.
 
 ## Ways to receive updates
 
