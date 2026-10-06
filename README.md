@@ -73,6 +73,7 @@ Complete bots in [examples/](examples): [echo](examples/echo/main.go), [keyboard
 [files](examples/files/main.go), [polls](examples/polls/main.go), [inline](examples/inline/main.go),
 [payments](examples/payments/main.go), [game](examples/game/main.go), [groups](examples/groups/main.go),
 [business](examples/business/main.go), [several_bots](examples/several_bots/main.go), [channel](examples/channel/main.go),
+[mtproxy_collector](examples/mtproxy_collector/main.go),
 and everything together in [laser_tele_example](laser_tele_example/mybot.go).
 
 ```

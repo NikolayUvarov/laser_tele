@@ -118,6 +118,10 @@ bot, err := laser_tele.NewBot(laser_tele.LaserTeleConfigT{APIURL: "http://localh
 A local server started with `--local` returns paths of files on its disk instead of links,
 `LoadFile` can't download such files: read them from the disk.
 
+Where Telegram is blocked, the server from [the fork with MTProxy support](https://github.com/NikolayUvarov/telegram-bot-api#mtproxy)
+connects to Telegram through MTProxy servers, checks them and switches to a working one. The example
+[mtproxy_collector](../examples/mtproxy_collector/main.go) collects such servers from channels for it.
+
 ## Ways to receive updates
 
 The function passed to `LaserTeleRun` is called in the loop requesting updates: while it works, new updates wait.

@@ -45,6 +45,7 @@ TG_API_KEY=123456:ABC-DEF go run ./examples/echo
 | [groups](../examples/groups/main.go) | join requests, greetings, reactions, boosts |
 | [business](../examples/business/main.go) | answering on behalf of a business account |
 | [several_bots](../examples/several_bots/main.go) | two bots in one program |
+| [mtproxy_collector](../examples/mtproxy_collector/main.go) | collecting MTProxy servers from channels for the Bot API server with MTProxy support |
 | [channel](../examples/channel/main.go) | processing updates in several goroutines |
 | [laser_tele_example](../laser_tele_example/mybot.go) | everything together |
 
