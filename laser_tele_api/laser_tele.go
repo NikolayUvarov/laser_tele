@@ -59,6 +59,9 @@ func DoLaserTeleInit(config LaserTeleConfigT) {
 
 	fmt.Println("APIKEY is set")
 	fmt.Println("TIMEOUT: ", bot.timeout)
+	if bot.proxy != "" {
+		fmt.Println("PROXY: ", bot.proxy)
+	}
 }
 
 // getDefaultBot returns the default bot, it is created if it doesn't exist yet

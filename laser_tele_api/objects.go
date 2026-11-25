@@ -470,6 +470,12 @@ type LaserTeleConfigT struct {
 	// The larger file is renamed to <name>.log.1, the previous <name>.log.1 is deleted
 	LogMaxSize  int64
 	DownloadDir string // directory for files downloaded by LoadFile, default "downloadedFiles"
+	// Proxy (optional) is a proxy for all requests to Telegram: "http://host:port", "https://host:port"
+	// or "socks5://host:port", with "user:password@" before the host if the proxy needs them.
+	// If empty it is taken from TG_PROXY env, otherwise the usual HTTPS_PROXY and NO_PROXY env are used.
+	// The Bot API works over HTTPS, so an MTProto proxy (tg://proxy?...) can't be used here;
+	// the laser-mtproxy server has an HTTP CONNECT and SOCKS5 gateway for bots
+	Proxy string
 }
 
 // APIError is returned when Telegram refused the request,

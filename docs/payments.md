@@ -10,9 +10,9 @@ in `ProviderToken`; prices are in the smallest units of the currency (cents, kop
 ## The flow
 
 1. The bot sends an invoice: `SendInvoice`, or a link `CreateInvoiceLink`.
-2. For invoices with `IsFlexible` the user enters the address, the bot gets `shipping_query`
+2. For invoices with `IsFlexible` the user enters the address; the bot gets `shipping_query`
    and answers with the ways of delivery: `AnswerShippingQuery`.
-3. The user presses Pay, the bot gets `pre_checkout_query` and must confirm or cancel it
+3. The user presses Pay; the bot gets `pre_checkout_query` and must confirm or cancel it
    within 10 seconds: `AnswerPreCheckoutQuery`.
 4. The bot gets a message with `SuccessfulPayment` and delivers the goods.
 
@@ -63,14 +63,14 @@ Deliver the goods only after `SuccessfulPayment`: a confirmed pre-checkout query
 | `Currency`, `Prices` | `XTR` with one price for Stars; for providers several parts: goods, delivery, tax |
 | `ProviderToken` | from @BotFather, empty for Stars |
 | `PhotoURL`, `PhotoWidth`, `PhotoHeight`, `PhotoSize` | a picture of the goods |
-| `NeedName`, `NeedPhoneNumber`, `NeedEmail`, `NeedShippingAddress` | ask the user for the data, it comes in `OrderInfo` |
-| `IsFlexible` | the price depends on the delivery, the bot gets `shipping_query` |
+| `NeedName`, `NeedPhoneNumber`, `NeedEmail`, `NeedShippingAddress` | ask the user for the data; it comes in `OrderInfo` |
+| `IsFlexible` | the price depends on the delivery; the bot gets `shipping_query` |
 | `MaxTipAmount`, `SuggestedTipAmounts` | tips (not for Stars) |
 | `StartParameter` | for `SendInvoice`: forwarded invoices open the bot with `/start <parameter>` |
 | `SubscriptionPeriod` | for `CreateInvoiceLink` with Stars: `2592000` (30 days) makes a monthly subscription |
-| `ReplyMarkup` | for `SendInvoice`: a keyboard, its first button must be `{Text: "Pay", Pay: true}` |
+| `ReplyMarkup` | for `SendInvoice`: a keyboard whose first button must be `{Text: "Pay", Pay: true}` |
 
-A link to pay can be sent anywhere, for example to a website:
+You can put a payment link anywhere, for example on a website:
 
 ```go
 link, err := laser_tele.CreateInvoiceLink(laser_tele.InvoiceConfig{
@@ -122,7 +122,7 @@ if update.Type() == "subscription" {
 }
 ```
 
-`EditUserStarSubscription(userID, chargeID, true)` cancels a subscription of a user, `false` enables it again.
+`EditUserStarSubscription(userID, chargeID, true)` cancels a user's subscription; `false` enables it again.
 A refunded payment comes as a message with `RefundedPayment`.
 
 See [examples/payments](../examples/payments/main.go).

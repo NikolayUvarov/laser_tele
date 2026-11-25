@@ -1,6 +1,6 @@
 # laser_tele
 
-The development of this library was initiated for internal company projects, but it can be useful for anyone using Telegram to send messages. The library was designed to be user-friendly and accessible.
+A Go library for Telegram bots. We started it for internal projects of our company, and it works for anyone who sends messages through Telegram.
 
 Code Artisan: [https://github.com/LaserPes]
 
@@ -12,7 +12,8 @@ Visionary Director: [https://github.com/NikolayUvarov]
 - Sending messages with formatting, photos, videos, documents, inline keyboards; downloading files from users
 - Polls and quizzes, inline mode, payments in Telegram Stars and through providers, games, reactions, join requests, business accounts
 - Several bots in one program
-- Errors with Telegram's codes, logs without texts of messages and with rotation; the token never gets to logs and errors
+- Work through an HTTP or SOCKS5 proxy (`Proxy` in the config or the `TG_PROXY` environment variable)
+- Errors carry Telegram's codes; logs rotate and leave out message texts; the token never gets into logs or errors
 - `Call` for any other method of the Bot API
 
 ## Install
@@ -76,6 +77,16 @@ and everything together in [laser_tele_example](laser_tele_example/mybot.go).
 
 ```
 TG_API_KEY=123456789:AAH... go run ./examples/keyboard
+```
+
+## laser-mtproxy
+
+[mtproxy/](mtproxy/README.md) is a separate program in this repository: an MTProto proxy server for Telegram
+applications with a web interface, per-user secrets and connection limits. It also runs an HTTP CONNECT and SOCKS5
+gateway, so bots built on this library can reach the Bot API through it:
+
+```go
+laser_tele.DoLaserTeleInit(laser_tele.LaserTeleConfigT{Proxy: "http://192.168.1.10:1080"})
 ```
 
 ## Versions

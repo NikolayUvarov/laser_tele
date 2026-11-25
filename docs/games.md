@@ -6,7 +6,7 @@ See [the Telegram guide](https://core.telegram.org/bots/games).
 1. Create the game with `/newgame` in @BotFather, choose its short name, for example `race`.
 2. Host the page of the game on your server.
 3. The bot sends the game, the user presses Play, the bot answers with the URL of the page.
-4. When the user finishes, the page sends the score to your server, the server saves it with `SetGameScore`.
+4. When the user finishes, the page sends the score to your server, and the server saves it with `SetGameScore`.
 
 ## Sending the game
 
@@ -19,7 +19,7 @@ if err != nil {
 fmt.Println("Game in message", sent.MessageID)
 ```
 
-The message gets a Play button automatically. A custom keyboard must have the play button first,
+The message gets a Play button automatically. A custom keyboard must have the Play button first;
 send it with `Call`:
 
 ```go
@@ -81,7 +81,7 @@ for _, row := range scores {
 ```
 
 `GetGameHighScores` returns the score of the user and of several neighbors in the table.
-Check scores sent by the page on your server, users can fake requests.
+Check the scores the page sends on your server: users can fake requests.
 
 See [examples/game](../examples/game/main.go): the bot with a small HTTP server receiving scores.
 

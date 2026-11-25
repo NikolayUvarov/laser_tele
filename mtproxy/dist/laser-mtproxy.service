@@ -1,0 +1,30 @@
+# systemd unit of laser-mtproxy for a manual installation; "sudo ./laser-mtproxy --install" creates the same unit.
+#   sudo useradd --system --home /opt/laser-mtproxy --shell /usr/sbin/nologin laser-mtproxy
+#   sudo install -d -o laser-mtproxy -g laser-mtproxy /opt/laser-mtproxy
+#   sudo install -m 755 laser-mtproxy /opt/laser-mtproxy/
+#   sudo install -m 600 -o laser-mtproxy -g laser-mtproxy laser-mtproxy.json /opt/laser-mtproxy/
+#   sudo cp laser-mtproxy.service /etc/systemd/system/ && sudo systemctl enable --now laser-mtproxy
+[Unit]
+Description=laser-mtproxy: MTProto proxy for Telegram and Bot API gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=laser-mtproxy
+Group=laser-mtproxy
+WorkingDirectory=/opt/laser-mtproxy
+ExecStart=/opt/laser-mtproxy/laser-mtproxy -config /opt/laser-mtproxy/laser-mtproxy.json
+Restart=always
+RestartSec=3
+# ports below 1024 (for example 443 for Fake TLS) need this capability
+#AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/laser-mtproxy
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

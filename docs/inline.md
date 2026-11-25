@@ -25,7 +25,7 @@ laser_tele.LaserTeleRun(func(update laser_tele.Update) {
 })
 ```
 
-A query must be answered within some seconds, with up to 50 results. Each result has an ID unique within the answer.
+Answer a query within a few seconds, with up to 50 results. Each result needs an ID unique within the answer.
 
 ## Results
 

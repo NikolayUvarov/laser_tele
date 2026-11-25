@@ -20,9 +20,30 @@ const tgApiLink = "https://api.telegram.org/bot"
 const tgApiFileLink = "https://api.telegram.org/file/bot"
 const defaultDownloadDir = "downloadedFiles"
 
-// Clients with timeouts, so a hung connection can't stall the bot forever
-var httpClient = &http.Client{Timeout: 60 * time.Second}
-var fileClient = &http.Client{Timeout: 10 * time.Minute}
+// Timeouts of HTTP clients, so a hung connection can't stall the bot forever
+const apiTimeout = 60 * time.Second
+const fileTimeout = 10 * time.Minute
+
+// newTransport returns the transport for requests to Telegram through proxy,
+// the default transport (with HTTPS_PROXY and NO_PROXY env) if proxy is empty
+func newTransport(proxy string) (http.RoundTripper, string, error) {
+	if proxy == "" {
+		return http.DefaultTransport, "", nil
+	}
+	proxyURL, err := url.Parse(proxy)
+	if err != nil || proxyURL.Host == "" {
+		// the text of the proxy isn't shown: it may contain a password
+		return nil, "", errors.New("wrong Proxy: expected http://host:port or socks5://host:port")
+	}
+	switch proxyURL.Scheme {
+	case "http", "https", "socks5":
+	default:
+		return nil, "", fmt.Errorf("wrong Proxy scheme %q: http, https and socks5 are supported", proxyURL.Scheme)
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = http.ProxyURL(proxyURL)
+	return transport, proxyURL.Redacted(), nil
+}
 
 // Callback processes an update
 type Callback func(Update)
@@ -39,6 +60,7 @@ type Bot struct {
 	onUpdate    Callback
 	updates     chan Update
 	logger      *logger
+	proxy       string // proxy URL without password, empty if not set
 
 	allowedUpdates string // JSON list of update types for getUpdates
 
@@ -52,7 +74,8 @@ type Bot struct {
 }
 
 // NewBot creates a bot. If config.APIKEY is empty, it is taken from TG_API_KEY env or .APIKEY file,
-// if config.Timeout is 0, it is taken from TIMEOUT env (seconds, default 10)
+// if config.Timeout is 0, it is taken from TIMEOUT env (seconds, default 10),
+// if config.Proxy is empty, it is taken from TG_PROXY env
 func NewBot(config LaserTeleConfigT) (*Bot, error) {
 	apiKey := config.APIKEY
 	if apiKey == "" {
@@ -74,6 +97,16 @@ func NewBot(config LaserTeleConfigT) (*Bot, error) {
 		}
 		timeout = time.Duration(timeoutInt) * time.Second
 	}
+
+	proxy := config.Proxy
+	if proxy == "" {
+		proxy = getEnvD("TG_PROXY", "")
+	}
+	transport, proxyInfo, err := newTransport(proxy)
+	if err != nil {
+		return nil, err
+	}
+	apiClient := &http.Client{Timeout: apiTimeout, Transport: transport}
 
 	logger, err := newLogger(config, apiKey)
 	if err != nil {
@@ -103,10 +136,16 @@ func NewBot(config LaserTeleConfigT) (*Bot, error) {
 		onUpdate:       config.CallbackOnUpdate,
 		logger:         logger,
 		allowedUpdates: string(allowedUpdatesJSON),
-		httpGet:        httpClient.Get,
-		httpPost:       httpClient.Post,
-		fileClient:     fileClient,
+		httpGet:        apiClient.Get,
+		httpPost:       apiClient.Post,
+		fileClient:     &http.Client{Timeout: fileTimeout, Transport: transport},
+		proxy:          proxyInfo,
 	}, nil
+}
+
+// Proxy returns the proxy of the bot without the password, empty if the bot works without it
+func (b *Bot) Proxy() string {
+	return b.proxy
 }
 
 // MakeChan creates the channel, to which updates are sent, and returns it. It must be called before Run.

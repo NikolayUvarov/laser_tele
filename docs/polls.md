@@ -12,7 +12,7 @@ if err != nil {
 fmt.Println("Poll", sent.Poll.ID, "in message", sent.MessageID)
 ```
 
-A poll has 1-12 options, the question is up to 300 characters. `PollConfig` fields are optional:
+A poll has 1 to 12 options, and the question is up to 300 characters. `PollConfig` fields are optional:
 
 | Field | Meaning |
 |---|---|
@@ -26,7 +26,7 @@ A poll has 1-12 options, the question is up to 300 characters. `PollConfig` fiel
 
 ## A quiz
 
-A quiz has correct answers: the user sees if they were right, `Explanation` is shown after a wrong answer.
+A quiz has correct answers: the user sees whether they were right, and a wrong answer shows `Explanation`.
 
 ```go
 _, err := laser_tele.SendPoll(chatID, "What does `go f()` do?", []string{"Calls f", "Starts f in a goroutine", "Defers f"},
@@ -66,7 +66,7 @@ laser_tele.LaserTeleRun(func(update laser_tele.Update) {
 })
 ```
 
-`PollAnswer.User.ID` is also the ID of the private chat with the user, the bot can write there
+`PollAnswer.User.ID` is also the ID of the private chat with the user; the bot can write there
 if the user started the bot. Votes of anonymous chat administrators have `VoterChat` instead of `User`.
 
 ## Closing a poll

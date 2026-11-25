@@ -18,7 +18,8 @@ with the same name and parameters for each of them, marked ✓ in the column Bot
 | Function | Bot | Description |
 |---|---|---|
 | `DoLaserTeleInit(config LaserTeleConfigT)` |  | DoLaserTeleInit configures the default bot with config. It exits the program if the token is not found |
-| `NewBot(config LaserTeleConfigT) (*Bot, error)` |  | NewBot creates a bot. If config.APIKEY is empty, it is taken from TG_API_KEY env or .APIKEY file, if config.Timeout is 0, it is taken from TIMEOUT env (seconds, default 10) |
+| `NewBot(config LaserTeleConfigT) (*Bot, error)` |  | NewBot creates a bot. If config.APIKEY is empty, it is taken from TG_API_KEY env or .APIKEY file, if config.Timeout is 0, it is taken from TIMEOUT env (seconds, default 10), if config.Proxy is empty, it is taken from TG_PROXY env |
+| `bot.Proxy() string` |  | Proxy returns the proxy of the bot without the password, empty if the bot works without it |
 | `LaserTeleRun(callback Callback)` | ✓ | LaserTeleRun requests updates of the default bot every Timeout and passes each of them to OnUpdateCallbackFunc, TgChan (if MakeChan was called) and callback. It never returns and exits the program if the token is not found |
 | `bot.Run(callback Callback)` | ✓ | Run requests updates every Timeout and passes each of them like UpdateRequest. It never returns |
 | `UpdateRequest(callback Callback)` | ✓ | UpdateRequest requests new updates of the default bot once and passes each of them to OnUpdateCallbackFunc, TgChan (if MakeChan was called) and callback |

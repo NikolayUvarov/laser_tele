@@ -1,0 +1,71 @@
+{
+  "host": "0.0.0.0",
+  "port": 1443,
+  "public_host": "",
+  "users": [
+    {
+      "name": "lan",
+      "secret": "",
+      "max_connections": 100,
+      "allow_external": false,
+      "comment": "общий секрет для локальной сети"
+    },
+    {
+      "name": "example",
+      "secret": "",
+      "max_connections": 0,
+      "allow_external": true,
+      "comment": "пример: внешний пользователь, выключен (0); поставьте N, чтобы разрешить до N подключений"
+    }
+  ],
+  "dc_ip": [
+    "2:149.154.167.220",
+    "4:149.154.167.220"
+  ],
+  "buf_kb": 256,
+  "pool_size": 4,
+  "cfproxy": true,
+  "h2": true,
+  "cfproxy_user_domain_enabled": false,
+  "cfproxy_user_domain": [],
+  "cfproxy_worker_enabled": false,
+  "cfproxy_worker_domain": [],
+  "cfproxy_domains_url": "https://raw.githubusercontent.com/Flowseal/tg-ws-proxy/main/.github/cfproxy-domains.txt",
+  "no_secure": false,
+  "force_test_dc": false,
+  "fake_tls_domain": "",
+  "proxy_protocol": false,
+  "verbose": false,
+  "log_file": "laser-mtproxy.log",
+  "log_max_mb": 5,
+  "access": {
+    "trusted_networks": [
+      "loopback",
+      "lan"
+    ],
+    "username": "admin"
+  },
+  "gateway": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 1080,
+    "allowed_hosts": [
+      "api.telegram.org:443"
+    ],
+    "fallback_ips": {
+      "api.telegram.org": [
+        "149.154.167.220"
+      ]
+    },
+    "via_cfproxy_worker": true
+  },
+  "web": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "tls_cert": "",
+    "tls_key": "",
+    "language": "ru",
+    "admin_trusted_only": true,
+    "allowed_hosts": []
+  }
+}

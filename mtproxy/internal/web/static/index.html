@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>laser-mtproxy</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <img src="favicon.svg" alt="" class="logo">
+    <span class="name">laser-mtproxy</span>
+    <span id="status-pill" class="pill pill-muted">…</span>
+  </div>
+  <div class="top-actions">
+    <button id="lang-toggle" class="btn btn-ghost btn-sm" type="button">EN</button>
+    <button id="theme-toggle" class="btn btn-ghost btn-sm" type="button" data-i18n-title="theme.toggle">◐</button>
+    <button id="logout" class="btn btn-ghost btn-sm" type="button" data-i18n="btn.logout" hidden>Выйти</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="view-login" class="login" hidden>
+    <form id="login-form" class="card login-card" autocomplete="on">
+      <h1 data-i18n="login.title">Вход</h1>
+      <p class="muted" id="login-reason"></p>
+      <label class="field"><span data-i18n="login.username">Логин</span>
+        <input id="login-user" name="username" autocomplete="username" required></label>
+      <label class="field"><span data-i18n="login.password">Пароль</span>
+        <input id="login-pass" name="password" type="password" autocomplete="current-password" required></label>
+      <p id="login-error" class="error" hidden></p>
+      <button class="btn btn-primary" type="submit" data-i18n="btn.login">Войти</button>
+    </form>
+  </section>
+
+  <section id="view-app" hidden>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="connect" data-i18n="tab.connect" type="button">Подключение</button>
+      <button class="tab" data-tab="users" data-i18n="tab.users" type="button">Пользователи</button>
+      <button class="tab" data-tab="report" data-i18n="tab.report" type="button">Отчёт</button>
+      <button class="tab" data-tab="stats" data-i18n="tab.stats" type="button">Статистика</button>
+      <button class="tab" data-tab="settings" data-i18n="tab.settings" type="button">Настройки</button>
+      <button class="tab" data-tab="tests" data-i18n="tab.tests" type="button">Проверка</button>
+      <button class="tab" data-tab="logs" data-i18n="tab.logs" type="button">Логи</button>
+    </nav>
+
+    <!-- Connect -->
+    <div class="panel" id="panel-connect">
+      <div id="proxy-error" class="banner banner-error" hidden></div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-head">
+            <h2 data-i18n="connect.state">Состояние</h2>
+            <button id="restart" class="btn btn-sm" type="button" data-i18n="btn.restart">Перезапустить прокси</button>
+          </div>
+          <dl class="kv" id="state-list"></dl>
+        </div>
+        <div class="card">
+          <h2 data-i18n="connect.access">Доступ</h2>
+          <dl class="kv" id="access-list"></dl>
+          <p class="hint" id="access-hint"></p>
+        </div>
+      </div>
+
+      <h2 class="section-title" data-i18n="connect.apps">Приложения Telegram (MTProto)</h2>
+      <div class="card">
+        <div class="card-head">
+          <p id="users-summary" class="no-margin"></p>
+          <button class="btn btn-primary" type="button" data-goto="users" data-i18n="connect.to_users">Пользователи, QR-коды и ссылки</button>
+        </div>
+        <p class="hint" data-i18n="connect.users_hint">У каждого пользователя свой секрет и личная страница с QR-кодом. Адрес страницы можно отправить человеку.</p>
+      </div>
+
+      <h2 class="section-title" data-i18n="connect.bots">Боты (Bot API через шлюз)</h2>
+      <div class="card" id="gateway-card"></div>
+
+      <details class="card howto">
+        <summary data-i18n="howto.title">Как подключить Telegram вручную</summary>
+        <ol>
+          <li data-i18n="howto.desktop">Telegram Desktop: Настройки → Продвинутые настройки → Тип подключения → Прокси → Добавить прокси → MTProto.</li>
+          <li data-i18n="howto.mobile">Android / iOS: Настройки → Данные и память → Прокси → Добавить прокси → MTProto. Проще всего открыть на телефоне личную страницу пользователя и нажать «Открыть в Telegram».</li>
+          <li data-i18n="howto.fields">Сервер, порт и секрет есть на личной странице пользователя: вкладка «Пользователи» → «QR и ссылка».</li>
+        </ol>
+        <p class="hint" data-i18n="howto.media">Не грузятся фото и видео? Оставьте в «DC → IP» только 4:149.154.167.220 или очистите поле (вкладка «Настройки»).</p>
+        <p class="hint" data-i18n="howto.ipv6">Если в логах ошибки подключения по IPv6, выключите в настройках прокси Telegram «Попытка соединения через IPv6».</p>
+      </details>
+    </div>
+
+    <!-- Users -->
+    <div class="panel" id="panel-users" hidden>
+      <div class="card">
+        <h2 data-i18n="users.title">Пользователи MTProto</h2>
+        <p class="hint" data-i18n="users.hint">Лимит: 0 — пользователь выключен, N — до N одновременных подключений. Одно приложение Telegram держит несколько подключений (основное и отдельные для загрузки медиа), поэтому ставьте с запасом, например 10–20 на устройство; пик виден в отчёте.</p>
+        <div class="table-wrap"><table class="result-table users-table" id="users-table"></table></div>
+        <p class="hint" id="users-public-hint" data-i18n="users.no_public" hidden>У пользователей с доступом снаружи в ссылке стоит адрес этой страницы. Если снаружи он недоступен, укажите «Внешний адрес в ссылках» в настройках.</p>
+      </div>
+      <form class="card user-form" id="user-form" novalidate>
+        <h2 id="user-form-title" data-i18n="users.add">Добавить пользователя</h2>
+        <div class="row-3">
+          <label class="field"><span data-i18n="users.name">Имя</span><input name="name" maxlength="64" required></label>
+          <label class="field"><span data-i18n="users.max">Одновременных подключений (0 — выключен)</span><input name="max_connections" type="number" min="0" value="20"></label>
+          <label class="check check-inline"><input type="checkbox" name="allow_external"><span data-i18n="users.external">Пускать не только из доверенных сетей</span></label>
+        </div>
+        <label class="field"><span data-i18n="users.comment">Комментарий</span><input name="comment" maxlength="200"></label>
+        <label class="field"><span data-i18n="users.secret">Секрет (пусто — создать автоматически)</span>
+          <span class="input-row"><input name="secret" class="mono" maxlength="32" spellcheck="false">
+          <button type="button" class="btn btn-sm" id="user-gen" data-i18n="btn.generate">Создать</button></span></label>
+        <div class="savebar static">
+          <p id="user-msg" class="msg" hidden></p>
+          <button type="button" class="btn" id="user-cancel" data-i18n="btn.cancel" hidden>Отмена</button>
+          <button type="submit" class="btn btn-primary" id="user-submit" data-i18n="users.add_btn">Добавить</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Report -->
+    <div class="panel" id="panel-report" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2 data-i18n="report.title">Отчёт по пользователям</h2>
+          <div class="log-tools">
+            <a class="btn btn-sm" href="api/report.csv" data-i18n="report.csv">Скачать CSV</a>
+            <button class="btn btn-sm" type="button" id="report-reset" data-i18n="report.reset">Сбросить статистику</button>
+          </div>
+        </div>
+        <p class="hint" id="report-since"></p>
+        <div class="table-wrap"><table class="result-table" id="report-table"></table></div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="panel" id="panel-stats" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2 data-i18n="stats.title">Статистика с запуска процесса</h2>
+          <span class="muted small" data-i18n="stats.auto">обновляется каждые 5 секунд</span>
+        </div>
+        <div class="stat-grid" id="stat-grid"></div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="panel" id="panel-settings" hidden>
+      <form id="settings-form" novalidate>
+        <div class="card">
+          <h2 data-i18n="sec.mtproto">Подключение MTProto</h2>
+          <div class="row-3">
+            <label class="field"><span data-i18n="f.host">IP-адрес</span><input name="host" data-i18n-title="tip.host"></label>
+            <label class="field"><span data-i18n="f.port">Порт</span><input name="port" type="number" min="1" max="65535" data-i18n-title="tip.port"></label>
+            <label class="field"><span data-i18n="f.public_host">Внешний адрес в ссылках</span><input name="public_host" data-i18n-ph="ph.auto" data-i18n-title="tip.public_host"></label>
+          </div>
+          <p class="hint" data-i18n="hint.secrets_moved">Секреты задаются для каждого пользователя на вкладке «Пользователи».</p>
+          <div class="row-2">
+            <label class="field"><span data-i18n="f.fake_tls_domain">Fake TLS домен (ee-секрет)</span><input name="fake_tls_domain" data-i18n-ph="ph.off" data-i18n-title="tip.fake_tls"></label>
+            <label class="check"><input type="checkbox" name="proxy_protocol"><span data-i18n="f.proxy_protocol">PROXY protocol (за nginx/haproxy)</span></label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="sec.dc">Датацентры Telegram (DC → IP)</h2>
+          <label class="field"><span data-i18n="f.dc_ip">По одному правилу на строку, формат номер:IP</span>
+            <textarea name="dc_ip" rows="3" class="mono" spellcheck="false" data-i18n-title="tip.dc"></textarea></label>
+          <div class="row-2">
+            <label class="field"><span data-i18n="f.pool_size">Пул WebSocket-сессий на DC</span><input name="pool_size" type="number" min="0" data-i18n-title="tip.pool"></label>
+            <label class="field"><span data-i18n="f.buf_kb">Буфер сокета, КБ</span><input name="buf_kb" type="number" min="4" data-i18n-title="tip.buf_kb"></label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="sec.cfproxy">Cloudflare Proxy</h2>
+          <label class="check"><input type="checkbox" name="cfproxy"><span data-i18n="f.cfproxy">Включить CF-прокси для недоступных DC</span></label>
+          <label class="check"><input type="checkbox" name="h2"><span data-i18n="f.h2">Медиа через Cloudflare по общему HTTP/2-соединению</span></label>
+          <p class="hint" data-i18n="tip.h2">Одно HTTP/2-соединение на датацентр и домен для всех загрузок медиа. Нужны CF-прокси и TLS.</p>
+          <label class="check"><input type="checkbox" name="cfproxy_user_domain_enabled"><span data-i18n="f.cf_custom">Свои домены вместо автоматического выбора</span></label>
+          <label class="field"><span data-i18n="f.cf_domains">Свои домены (через запятую)</span><input name="cfproxy_user_domain" spellcheck="false"></label>
+          <label class="field"><span data-i18n="f.cf_url">Адрес списка доменов (обновляется раз в час, пусто = только встроенный список)</span><input name="cfproxy_domains_url" spellcheck="false"></label>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="sec.cfworker">Cloudflare Worker</h2>
+          <label class="check"><input type="checkbox" name="cfproxy_worker_enabled"><span data-i18n="f.worker_enabled">Использовать Cloudflare Worker</span></label>
+          <label class="field"><span data-i18n="f.worker_domains">Домены Worker (через запятую)</span><input name="cfproxy_worker_domain" spellcheck="false" placeholder="name.account.workers.dev"></label>
+          <label class="check"><input type="checkbox" name="no_secure"><span data-i18n="f.no_secure">Выключить TLS для CF-прокси и CF Worker (порт 80)</span></label>
+          <label class="check"><input type="checkbox" name="force_test_dc"><span data-i18n="f.force_test_dc">Весь трафик на тестовые DC</span></label>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="sec.access">Доступ</h2>
+          <label class="field"><span data-i18n="f.trusted">Доверенные сети: без пароля (по одной на строку)</span>
+            <textarea name="trusted_networks" rows="3" class="mono" spellcheck="false"></textarea></label>
+          <p class="hint" data-i18n="tip.trusted">Ключевые слова: loopback (этот компьютер), lan (частные подсети интерфейсов этой машины, публичные не входят), private (все частные адреса), any (все адреса, пароль не спрашивается никогда). Также CIDR и отдельные IP.</p>
+          <p class="hint" id="iface-nets"></p>
+          <div class="row-3">
+            <label class="field"><span data-i18n="f.username">Логин</span><input name="username" autocomplete="off"></label>
+            <label class="field"><span data-i18n="f.new_password">Новый пароль</span><input name="new_password" type="password" autocomplete="new-password" data-i18n-ph="ph.unchanged"></label>
+            <label class="check check-inline"><input type="checkbox" name="clear_password"><span data-i18n="f.clear_password">Удалить пароль</span></label>
+          </div>
+          <p class="hint" id="password-state"></p>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="sec.gateway">Шлюз Bot API (HTTP CONNECT и SOCKS5)</h2>
+          <label class="check"><input type="checkbox" name="gw_enabled"><span data-i18n="f.gw_enabled">Включить шлюз</span></label>
+          <div class="row-2">
+            <label class="field"><span data-i18n="f.host">IP-адрес</span><input name="gw_host"></label>
+            <label class="field"><span data-i18n="f.port">Порт</span><input name="gw_port" type="number" min="1" max="65535"></label>
+          </div>
+          <label class="field"><span data-i18n="f.gw_allowed">Разрешённые адреса назначения (host:port, *.domain:port; по одному на строку)</span>
+            <textarea name="gw_allowed" rows="2" class="mono" spellcheck="false"></textarea></label>
+          <label class="field"><span data-i18n="f.gw_fallback">Запасные IP хостов (host=IP, IP; по одному хосту на строку)</span>
+            <textarea name="gw_fallback" rows="2" class="mono" spellcheck="false" data-i18n-title="tip.gw_fallback"></textarea></label>
+          <label class="check"><input type="checkbox" name="gw_via_worker"><span data-i18n="f.gw_via_worker">Если прямое соединение не удалось, идти через CF Worker</span></label>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="sec.web">Веб-интерфейс</h2>
+          <div class="row-3">
+            <label class="field"><span data-i18n="f.host">IP-адрес</span><input name="web_host"></label>
+            <label class="field"><span data-i18n="f.port">Порт</span><input name="web_port" type="number" min="1" max="65535"></label>
+            <label class="field"><span data-i18n="f.language">Язык по умолчанию</span>
+              <select name="web_language"><option value="ru">Русский</option><option value="en">English</option></select></label>
+          </div>
+          <div class="row-2">
+            <label class="field"><span data-i18n="f.tls_cert">TLS-сертификат (файл)</span><input name="web_tls_cert" data-i18n-ph="ph.off"></label>
+            <label class="field"><span data-i18n="f.tls_key">TLS-ключ (файл)</span><input name="web_tls_key" data-i18n-ph="ph.off"></label>
+          </div>
+          <label class="check"><input type="checkbox" name="web_admin_trusted_only"><span data-i18n="f.admin_trusted_only">Администрирование только из доверенных сетей (вход по паролю снаружи запрещён)</span></label>
+          <label class="field"><span data-i18n="f.web_allowed">Дополнительные имена хоста веб-интерфейса (через запятую)</span><input name="web_allowed_hosts" spellcheck="false"></label>
+          <p class="hint" data-i18n="tip.web_restart">Адрес и TLS веб-интерфейса применяются после перезапуска процесса.</p>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="sec.logs">Логи</h2>
+          <label class="check"><input type="checkbox" name="verbose"><span data-i18n="f.verbose">Подробное логирование (verbose)</span></label>
+          <div class="row-2">
+            <label class="field"><span data-i18n="f.log_file">Файл лога (пусто = не писать)</span><input name="log_file"></label>
+            <label class="field"><span data-i18n="f.log_max_mb">Макс. размер лога, МБ</span><input name="log_max_mb" type="number" min="0" step="0.5"></label>
+          </div>
+        </div>
+
+        <div class="savebar">
+          <p id="settings-msg" class="msg" hidden></p>
+          <button type="button" id="settings-reset" class="btn" data-i18n="btn.reset">Отменить изменения</button>
+          <button type="submit" class="btn btn-primary" data-i18n="btn.save">Сохранить и перезапустить</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Tests -->
+    <div class="panel" id="panel-tests" hidden>
+      <div class="card">
+        <h2 data-i18n="test.title">Проверка маршрутов</h2>
+        <p class="hint" data-i18n="test.hint">Проверка открывает WebSocket к каждому DC. Поля заполнены доменами из настроек.</p>
+        <label class="check"><input type="checkbox" id="test-secure" checked><span data-i18n="test.secure">С TLS (порт 443)</span></label>
+        <div class="test-row">
+          <button class="btn" type="button" data-test="direct" data-i18n="test.direct">Прямой маршрут DC → IP</button>
+        </div>
+        <div class="test-row">
+          <input id="test-cf-domains" spellcheck="false" data-i18n-ph="ph.cf_domains">
+          <button class="btn" type="button" data-test="cfproxy" data-i18n="test.cfproxy">CF-прокси: свои домены</button>
+          <button class="btn" type="button" data-test="cfproxy_auto" data-i18n="test.cfauto">CF-прокси: встроенные</button>
+        </div>
+        <div class="test-row">
+          <input id="test-worker-domains" spellcheck="false" placeholder="name.account.workers.dev">
+          <button class="btn" type="button" data-test="cfworker" data-i18n="test.cfworker">CF Worker</button>
+        </div>
+      </div>
+      <div id="test-results"></div>
+    </div>
+
+    <!-- Logs -->
+    <div class="panel" id="panel-logs" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2 data-i18n="logs.title">Лог</h2>
+          <div class="log-tools">
+            <select id="log-level">
+              <option value="DEBUG">DEBUG+</option>
+              <option value="INFO" selected>INFO+</option>
+              <option value="WARN">WARN+</option>
+              <option value="ERROR">ERROR</option>
+            </select>
+            <label class="check check-inline"><input type="checkbox" id="log-follow" checked><span data-i18n="logs.follow">Следить</span></label>
+            <button class="btn btn-sm" type="button" id="log-clear" data-i18n="logs.clear">Очистить экран</button>
+            <a class="btn btn-sm" href="api/logs/download" data-i18n="logs.download">Скачать файл</a>
+          </div>
+        </div>
+        <pre id="log-view" class="log"></pre>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="toast" class="toast" hidden></div>
+</body>
+</html>

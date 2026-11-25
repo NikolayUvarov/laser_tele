@@ -53,7 +53,7 @@ laser_tele.LaserTeleRun(func(update laser_tele.Update) {
 The bot receives all of them by default (`laser_tele.AllUpdateTypes`). To receive only some kinds,
 list them in `LaserTeleConfigT.AllowedUpdates`.
 
-If Telegram adds a new kind of updates, `Type()` returns its name and the update can be read from `update.Raw`,
+If Telegram adds a new kind of update, `Type()` returns its name, and you can read the update from `update.Raw`,
 the JSON received from Telegram:
 
 ```go
@@ -111,7 +111,7 @@ Other useful fields:
 - `From`: the sender, empty for posts in channels; `SenderChat` for messages on behalf of a chat.
 - `ReplyToMessage`: the message this one replies to.
 - `ForwardOrigin`: where a forwarded message comes from, `ForwardOrigin.Type != ""` for forwarded messages.
-- `MediaGroupID`: the same for photos and videos sent as one album, they come as separate messages.
+- `MediaGroupID`: the same for photos and videos sent as one album; they arrive as separate messages.
 - `NewChatMembers`, `LeftChatMember`, `NewChatTitle`, `PinnedMessage`: service messages in groups.
 - `MigrateToChatID`: the group became a supergroup with a new ID, use it for new messages.
 - `SuccessfulPayment`: the user paid an invoice, see [Payments](payments.md).
@@ -131,7 +131,7 @@ func command(message laser_tele.Message) string {
 }
 ```
 
-`/start` comes when the user opens the bot first time. A link `https://t.me/your_bot?start=promo` sends `/start promo`.
+`/start` comes when the user opens the bot for the first time. A link `https://t.me/your_bot?start=promo` sends `/start promo`.
 Register the list of commands with `/setcommands` in @BotFather to show them in the menu of the chat.
 
 Offsets and lengths of entities are in UTF-16 code units, not bytes. To cut the text of an entity

@@ -3,10 +3,10 @@
 ## The bot in groups
 
 Add the bot to a group like a user. By default bots are in privacy mode and get only commands and replies
-to their messages; `/setprivacy` in @BotFather turns it off, then the bot gets all messages.
+to their messages. `/setprivacy` in @BotFather turns privacy mode off, and then the bot gets all messages.
 An administrator bot gets all messages and the updates below.
 
-`my_chat_member` tells about changes of the bot itself: it was added to a group or removed,
+`my_chat_member` reports changes of the bot itself: it was added to a group or removed,
 became an administrator, or a user blocked it in a private chat:
 
 ```go
@@ -64,7 +64,7 @@ for example to ask questions before approving.
 
 ## Reactions
 
-The bot puts a reaction on a message, `""` removes it. Only the emoji allowed for reactions can be used:
+The bot puts a reaction on a message; `""` removes it. Only these emoji are allowed as reactions:
 ❤ 👍 👎 🔥 🥰 👏 😁 🤔 🤯 😱 🤬 😢 🎉 🤩 🤮 💩 🙏 👌 🕊 🤡 🥱 🥴 😍 🐳 ❤‍🔥 🌚 🌭 💯 🤣 ⚡ 🍌 🏆 💔 🤨 😐 🍓 🍾 💋 🖕 😈 😴 😭 🤓 👻 👨‍💻 👀 🎃 🙈 😇 😨 🤝 ✍ 🤗 🫡 🎅 🎄 ☃ 💅 🤪 🗿 🆒 💘 🙉 🦄 😘 💊 🙊 😎 👾 🤷‍♂ 🤷 🤷‍♀ 😡
 
 ```go
@@ -90,7 +90,7 @@ case "message_reaction_count":
 }
 ```
 
-Reactions of other bots are not sent. `ReactionType.Type` is `emoji`, `custom_emoji` (with `CustomEmojiID`) or `paid`.
+Telegram doesn't send reactions of other bots. `ReactionType.Type` is `emoji`, `custom_emoji` (with `CustomEmojiID`) or `paid`.
 
 ## Boosts
 
@@ -106,8 +106,8 @@ case "removed_chat_boost":
 
 ## Business accounts
 
-An owner of a Telegram Business account can connect the bot in Settings > Telegram Business > Chatbots,
-then the bot answers customers on behalf of the account.
+An owner of a Telegram Business account can connect the bot in Settings > Telegram Business > Chatbots.
+Then the bot answers customers on behalf of the account.
 
 ```go
 switch update.Type() {
@@ -130,14 +130,14 @@ case "deleted_business_messages":
 }
 ```
 
-Other methods are sent on behalf of the account with `Call` and the `business_connection_id` parameter.
+To call other methods on behalf of the account, use `Call` with the `business_connection_id` parameter.
 
 ## Managed bots and message generation
 
 `managed_bot` comes when a bot managed by this bot is created or its token changes;
 `GetManagedBotToken(update.ManagedBot.Bot.ID)` returns the token of the managed bot.
 
-`stopped_message_generation` comes when the user asked to stop generating a message (a draft streamed by the bot):
+`stopped_message_generation` comes when the user asks to stop generating a message (a draft streamed by the bot):
 
 ```go
 if update.Type() == "stopped_message_generation" {

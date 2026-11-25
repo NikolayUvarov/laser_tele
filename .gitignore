@@ -5,3 +5,13 @@
 *.log
 *.log.1
 downloadedFiles/
+development-examples/**
+
+# laser-mtproxy: builds and runtime files
+mtproxy/build/
+mtproxy/laser-mtproxy
+mtproxy/laser-mtproxy.exe
+mtproxy/laser-mtproxy.json
+mtproxy/*.log
+mtproxy/*.log.1
+mtproxy/PLAN.md

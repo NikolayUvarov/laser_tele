@@ -3,7 +3,7 @@
 ## Create a bot
 
 1. Open [@BotFather](https://t.me/BotFather) in Telegram and send `/newbot`.
-2. Choose a name and a username, BotFather gives the token like `123456789:AAH...`.
+2. Choose a name and a username. BotFather gives you a token like `123456789:AAH...`.
 3. Keep the token secret: anybody with it controls the bot.
 
 ## Install
@@ -61,9 +61,9 @@ The token is taken from the first of:
 2. the `TG_API_KEY` environment variable;
 3. the `.APIKEY` file in the current directory (spaces and line breaks around the token are ignored).
 
-Don't commit the token: `.APIKEY` is in `.gitignore` of the repository, add it to yours too.
+Don't commit the token: `.APIKEY` is in the repository's `.gitignore`; add it to yours too.
 `DoLaserTeleInit` and `LaserTeleRun` stop the program if the token is not found.
-The token never gets to the logs and to the errors returned by the library.
+The token never gets into the logs or into the errors the library returns.
 
 ## Configuration
 
@@ -79,6 +79,7 @@ All fields of `LaserTeleConfigT` are optional:
 | `LogDir` | the current directory | directory of the log files |
 | `LogMaxSize` | 10 MB | size of a log file when it is rotated |
 | `DownloadDir` | `downloadedFiles` | directory for files downloaded by `LoadFile` |
+| `Proxy` | `TG_PROXY` env, then `HTTPS_PROXY` | proxy for requests to Telegram, see [Proxy](#proxy) |
 
 ```go
 laser_tele.DoLaserTeleInit(laser_tele.LaserTeleConfigT{
@@ -88,6 +89,31 @@ laser_tele.DoLaserTeleInit(laser_tele.LaserTeleConfigT{
 	DownloadDir:    "files",
 })
 ```
+
+## Proxy
+
+When `api.telegram.org` isn't reachable directly, the bot can work through an HTTP or SOCKS5 proxy:
+
+```go
+laser_tele.DoLaserTeleInit(laser_tele.LaserTeleConfigT{
+	Proxy: "http://192.168.1.10:1080", // or "socks5://192.168.1.10:1080"
+})
+```
+
+or without changing the code:
+
+```
+TG_PROXY=http://192.168.1.10:1080 go run .
+```
+
+If the proxy needs a password, put it before the host: `http://user:password@192.168.1.10:1080`.
+The password doesn't get into logs or errors; `bot.Proxy()` returns the address without it.
+Without `Proxy` and `TG_PROXY` the usual `HTTPS_PROXY` and `NO_PROXY` environment variables work.
+
+An MTProto proxy (a `tg://proxy?...&secret=...` link) can't be used here: it carries only MTProto,
+the protocol of Telegram applications, while bots use the Bot API over HTTPS.
+The [laser-mtproxy](../mtproxy/README.md) server is an MTProto proxy for applications and,
+on another port, an HTTP CONNECT and SOCKS5 gateway for bots: its web interface shows the address to put into `Proxy`.
 
 ## Ways to receive updates
 

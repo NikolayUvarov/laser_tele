@@ -42,6 +42,12 @@
 // SendInvoice, SendGame and others return an error; when Telegram refused the request it is *APIError.
 // Any Bot API method without its own function can be called with Call.
 //
+// # Proxy
+//
+// LaserTeleConfigT.Proxy (or TG_PROXY env) sends all requests to Telegram through an HTTP or SOCKS5 proxy,
+// for example the Bot API gateway of laser-mtproxy: "http://192.168.1.10:1080".
+// An MTProto proxy (tg://proxy?...) can't be used for the Bot API.
+//
 // # Logs
 //
 // Requests and responses are written to *.log files without texts of messages and without the token;

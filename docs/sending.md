@@ -43,7 +43,7 @@ if err := laser_tele.EditMessageText(chatID, messageID, "Order 15 is delivered")
 
 ## Files
 
-`SendPhoto`, `SendVideo` and `SendDocument` upload a local file, the text is the caption (up to 1024 characters):
+`SendPhoto`, `SendVideo` and `SendDocument` upload a local file; the text is the caption (up to 1024 characters):
 
 ```go
 if err := laser_tele.SendPhoto(chatID, "Our office", "images/office.jpg"); err != nil {
@@ -83,7 +83,7 @@ See [examples/files](../examples/files/main.go).
 
 ## Inline keyboards
 
-An inline keyboard is attached to a message. It is a list of rows, a row is a list of buttons:
+An inline keyboard is attached to a message. It's a list of rows, and a row is a list of buttons:
 
 ```go
 keyboard := laser_tele.InlineKeyboard{Keyboard: []laser_tele.Row{
@@ -112,7 +112,7 @@ A button has `Text` and one action:
 ### Pressed buttons
 
 A pressed button with `CallbackData` sends a `callback_query` update. Always answer it,
-otherwise Telegram shows progress on the button for some seconds:
+otherwise Telegram shows progress on the button for a few seconds:
 
 ```go
 laser_tele.LaserTeleRun(func(update laser_tele.Update) {
@@ -135,7 +135,7 @@ laser_tele.LaserTeleRun(func(update laser_tele.Update) {
 laser_tele.AnswerCallbackQueryWithConfig(query.ID, laser_tele.CallbackAnswerConfig{Text: "Not enough money", ShowAlert: true})
 ```
 
-`EditMessageReplyMarkup` changes the buttons of a sent message, an empty keyboard removes them:
+`EditMessageReplyMarkup` changes the buttons of a sent message; an empty keyboard removes them:
 
 ```go
 laser_tele.EditMessageReplyMarkup(chatID, messageID, laser_tele.InlineKeyboard{Keyboard: []laser_tele.Row{}})

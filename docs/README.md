@@ -14,7 +14,7 @@ import laser_tele "github.com/NikolayUvarov/laser_tele/v2/laser_tele_api"
 
 ## Guides
 
-1. [Getting started](getting-started.md): the first bot, configuration, several bots
+1. [Getting started](getting-started.md): the first bot, configuration, proxy, several bots
 2. [Receiving updates](updates.md): kinds of updates, messages, commands, media
 3. [Sending messages, files and keyboards](sending.md)
 4. [Polls and quizzes](polls.md)

@@ -57,7 +57,7 @@ func sendWithRetry(chatID int, text string) error {
 }
 ```
 
-Errors of requesting updates are printed and the bot tries again after `Timeout`.
+When a request for updates fails, the bot prints the error and tries again after `Timeout`.
 
 ## Logs
 
@@ -89,6 +89,6 @@ laser_tele.DoLaserTeleInit(laser_tele.LaserTeleConfigT{
 The token is never written to the logs in any mode. The logs of the library don't change the output
 of the standard `log` package of your program.
 
-Besides the files, the bot prints to the standard output that it started and a line per request of updates.
+Besides the files, the bot prints to standard output when it starts, and one line per request for updates.
 
 Next: [Reference](reference.md).
